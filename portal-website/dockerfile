@@ -1,0 +1,46 @@
+FROM node:lts AS builder
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y build-essential python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY apps/api/package*.json ./apps/api/
+COPY apps/client/package*.json ./apps/client/
+COPY ./ecosystem.config.js ./ecosystem.config.js
+
+RUN npm i -g prisma
+RUN npm i -g typescript@latest --force
+
+COPY apps/api ./apps/api
+COPY apps/client ./apps/client
+
+RUN cd apps/api && npm install
+RUN cd apps/api && npm i --save-dev @types/node
+RUN cd apps/api && npm run build
+
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN cd apps/client && yarn install --ignore-scripts --prefer-offline --network-timeout 1000000
+RUN cd apps/client && yarn add --dev typescript @types/node @types/minimatch --network-timeout 1000000
+RUN cd apps/client && yarn build
+
+
+FROM node:lts AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=builder /app/apps/api/ ./apps/api/
+COPY --from=builder /app/apps/client/.next/standalone ./apps/client
+COPY --from=builder /app/apps/client/.next/static ./apps/client/.next/static
+COPY --from=builder /app/apps/client/public ./apps/client/public
+COPY --from=builder /app/ecosystem.config.js ./ecosystem.config.js
+
+EXPOSE 3000 5003
+
+RUN npm install -g pm2
+
+CMD ["pm2-runtime", "ecosystem.config.js"]
