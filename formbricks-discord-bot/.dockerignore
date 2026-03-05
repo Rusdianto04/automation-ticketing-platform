@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+*.md
+logs/
+public/reports/
+ngrok-v3-stable-linux-amd64.tgz*

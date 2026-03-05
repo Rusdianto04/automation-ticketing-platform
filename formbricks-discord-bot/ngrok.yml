@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ngrok.yml
+# Konfigurasi Ngrok Tunnel — Formbricks Webhook Integration
+#
+# FUNGSI:
+#   Expose port 3000 (Express server) ke internet publik agar Formbricks
+#   dapat mengirim webhook submission ke server ini, meskipun server
+#   tidak memiliki IP publik (lokal / Docker).
+#
+# CARA PENGGUNAAN:
+#   1. Ganti `authtoken` dengan token Ngrok Anda dari https://dashboard.ngrok.com
+#   2. Set di Formbricks: Webhook URL → https://<ngrok-subdomain>.ngrok-free.app/webhook/formbricks
+#   3. Jalankan via Docker: service ngrok di docker-compose.yml sudah terkonfigurasi
+#
+# REGION:
+#   ap = Asia Pacific (Singapore) — latency lebih rendah untuk Indonesia
+#
+# CATATAN:
+#   Ngrok HANYA diperlukan untuk Formbricks webhook dari internet.
+#   N8N, peppermint, dan internal bot sudah berjalan di jaringan Docker (tidak perlu ngrok).
+#   Laporan HTML diakses via IP LAN perusahaan (PORTAL_URL di .env) — tidak perlu ngrok.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "2"
+authtoken: 36aWTUi38SPc4aET6UErjupLUQX_35gMk2gozagCKNPVmceXx
+
+tunnels:
+  bot:
+    proto: http
+    addr: formbricks-discord-bot:3000
+    inspect: true                   # Bisa dimonitor di http://localhost:4040
+
+region: ap                          # Asia Pacific — latency rendah dari Indonesia

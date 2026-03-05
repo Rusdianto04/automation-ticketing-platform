@@ -1,0 +1,320 @@
+{
+  "name": "Workflow 1: Automation Ticket Intelligence - Event Driven (Production)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-activity",
+        "options": {}
+      },
+      "id": "a84954d6-2da4-436e-8ec3-aec895f896b2",
+      "name": "Webhook: Discord Activity",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [5632, 1728],
+      "webhookId": "discord-activity"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// EVENT-DRIVEN ROUTER — Prisma compatible\n// Memvalidasi event dari bot, menentukan mode MONITORING/CLOSING,\n// dan meneruskan ke branch yang sesuai.\n// Field yang dikirim bot (src/services/discord.service.js):\n//   eventType, threadId, ticketId, ticketType,\n//   statusPengusulan, mode, threadName, authorName,\n//   messageId, messageContent, parentId, timestamp\n// ================================================================\nconst eventData = $input.first().json.body || $input.first().json;\n\n// Validasi event type\nif (eventData.eventType !== 'thread_activity') return [];\nif (!eventData.threadId || !eventData.ticketId) return [];\n\n// Validasi ticket type — Prisma schema hanya kenal TICKETING & INCIDENT\nconst ticketType = (eventData.ticketType || '').toUpperCase();\nif (ticketType !== 'TICKETING' && ticketType !== 'INCIDENT') return [];\n\n// ── Tentukan mode & status ─────────────────────────────────────\nlet mode   = null;\nlet status = null;\n\nif (eventData.mode) {\n  // Mode dikirim eksplisit dari bot (lebih reliable)\n  mode = eventData.mode.toUpperCase();\n} else {\n  // Fallback: derive dari statusPengusulan\n  // Prisma valid statuses: OPEN, PENDING, APPROVED, REJECTED,\n  //                        DONE, INVESTIGASI, MITIGASI, RESOLVED\n  const s = (eventData.statusPengusulan || '').toUpperCase();\n  if (ticketType === 'INCIDENT') {\n    mode   = s === 'RESOLVED' ? 'CLOSING' : 'MONITORING';\n    status = s === 'RESOLVED' ? 'CLOSED'  : (s || 'OPEN');\n  } else {\n    // TICKETING\n    mode   = s === 'DONE' ? 'CLOSING' : 'MONITORING';\n    status = s === 'DONE' ? 'CLOSED'  : (s || 'OPEN');\n  }\n}\n\nif (mode !== 'MONITORING' && mode !== 'CLOSING') return [];\n\n// ── Build thread name ──────────────────────────────────────────\nconst typeLabel    = ticketType === 'INCIDENT' ? '[Incident]' : '[Support]';\nconst statusPrefix = mode === 'CLOSING' ? '[CLOSED]' : '[OPEN]';\nconst threadName   = eventData.threadName\n  || `${statusPrefix} ${typeLabel} Ticket #${eventData.ticketId}`;\n\nconsole.log(`✅ [WF1] Ticket #${eventData.ticketId} → mode=${mode} type=${ticketType}`);\n\nreturn [{ json: {\n  threadId:       eventData.threadId,\n  threadName,\n  ticketId:       eventData.ticketId,\n  ticketType,\n  mode,\n  status:         status || eventData.statusPengusulan || 'OPEN',\n  parentId:       eventData.parentId || null,\n  eventTimestamp: eventData.timestamp,\n  triggeredBy:    eventData.authorName,\n  messageId:      eventData.messageId,\n  triggerMessage: eventData.messageContent\n}}];"
+      },
+      "id": "beaf21ad-d26f-40e9-b4cb-8d461fa20d51",
+      "name": "Event Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5856, 1728]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{\n  ($json.mode || '').toUpperCase() === 'CLOSING' ||\n  ['DONE','RESOLVED','CLOSED'].includes(($json.status || '').toUpperCase())\n}}"
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [6080, 1728],
+      "id": "da54f755-ac69-4468-8b5e-37a3132c785c",
+      "name": "Route by Mode"
+    },
+    {
+      "parameters": {
+        "url": "=https://discord.com/api/v10/channels/{{ $json.threadId }}/messages?limit=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "discordBotApi",
+        "options": {}
+      },
+      "id": "527083bf-8b44-46f2-ab3f-30675eb91313",
+      "name": "Get Messages (Monitor)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6304, 1632],
+      "credentials": {
+        "discordBotApi": {
+          "id": "9LUn0BRpctIHwG2y",
+          "name": "Discord Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://discord.com/api/v10/channels/{{ $json.threadId }}/messages?limit=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "discordBotApi",
+        "options": {}
+      },
+      "id": "feb97ea3-6260-465f-bcea-5e54be884204",
+      "name": "Get Messages (Closing)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6304, 1824],
+      "credentials": {
+        "discordBotApi": {
+          "id": "9LUn0BRpctIHwG2y",
+          "name": "Discord Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// EXTRACT (MONITOR MODE) — Strict Timeline Filter\n// Prisma fix:\n//   - Pinned message format identik (tidak berubah dari original)\n//   - ticketInfo.ticketId diekstrak dari pinned message Discord\n//   - Hanya action yang benar-benar selesai yang di-forward ke AI\n// ================================================================\nconst messages = $input.all().map(i => i.json);\nconst prev     = $node['Event Router'].json;\n\n// ── Extract info dari pinned message ──────────────────────────\nconst pinnedMsg = messages.find(m => m.pinned && m.content && !m.content.includes('COMMAND'));\nlet ticketInfo  = { ticketId: null, issue: 'Unknown', currentTimeline: '' };\n\nif (pinnedMsg) {\n  const c = pinnedMsg.content || '';\n  // Format dari buildTicketInfoMessage() & buildIncidentInfoMessage()\n  const idM = c.match(/#(\\d+)_(Support|Incident)/);\n  if (idM) ticketInfo.ticketId = idM[1];\n\n  // Ambil judul: Title, Incident Information, atau Issue\n  const issM =\n    c.match(/\\*\\*Title\\s*:\\*\\*\\s*(.+?)\\n/) ||\n    c.match(/\\*\\*Incident Information\\s*:\\*\\*\\s*(.+?)\\n/) ||\n    c.match(/\\*\\*Issue\\s*:\\*\\*\\s*(.+?)\\n/);\n  if (issM) ticketInfo.issue = issM[1].trim();\n\n  // Timeline saat ini\n  const tlM =\n    c.match(/\\*\\*Action Taken:\\*\\*\\s*([\\s\\S]*?)(?:\\*\\*Evidence|\\*\\*Summary|\\*\\*Handling|$)/) ||\n    c.match(/\\*\\*Tindak Lanjut:\\*\\*\\s*([\\s\\S]*?)(?:\\*\\*Evidence|\\*\\*Summary|$)/);\n  if (tlM) ticketInfo.currentTimeline = tlM[1].trim();\n}\n\nif (!ticketInfo.ticketId) {\n  // Fallback ke ticketId dari event router\n  if (prev.ticketId) {\n    ticketInfo.ticketId = String(prev.ticketId);\n    console.log(`⚠️  [MONITOR] Pinned not found — using event ticketId: ${prev.ticketId}`);\n  } else {\n    console.log('⏭ [MONITOR] SKIP: No ticket ID found');\n    return [];\n  }\n}\n\n// ── Filter KETAT: hanya completed actions ────────────────────\nconst ACTION_VERBS = [\n  // Indonesia — sudah selesai dikerjakan\n  'berhasil','sudah diperbaiki','sudah diganti','sudah diupdate','sudah direstart',\n  'sudah dicek','sudah dikonfigurasi','sudah diinstal','sudah diaktifkan',\n  'sudah dimatikan','sudah dinyalakan','sudah dilakukan','sudah selesai',\n  'sudah dinormalisasi','sudah dinormalkan','kembali normal','normal kembali',\n  'sudah berfungsi','berfungsi kembali','sudah terhubung','sudah online',\n  'selesai diperbaiki','selesai dikonfigurasi','selesai diinstal',\n  // English — completed actions\n  'restarted','rebooted','configured','installed','updated','upgraded',\n  'replaced','repaired','fixed','resolved','completed','deployed',\n  'implemented','patched','rolled back','migrated','activated','deactivated',\n  'reconfigured','reassigned','re-enabled','re-connected','verified','confirmed',\n  'tested and working','back online','back to normal','issue resolved',\n  'problem solved','now working','restored','recovered'\n];\n\nconst DISQUALIFY_PATTERNS = [\n  /^ok(e)?$/i, /^ya$/i, /^iya$/i, /^baik$/i, /^siap$/i, /^noted$/i,\n  /^thanks?/i, /^terima\\s*kasih/i, /^halo/i, /^hi$/i, /^hello$/i,\n  /^\\?+$/, /^tolong/i, /^mohon/i, /^coba\\s*(cek|lihat)/i,\n  /^ada\\s*update/i, /^gimana/i, /^bagaimana/i, /^kapan/i, /^sudah\\s*belum/i,\n  /^masih\\s*(proses|dicek|belum)/i, /^lagi\\s*dicek/i,\n  /^tunggu/i, /^sebentar/i, /^nanti/i, /^akan\\s*(dicek|diperbaiki|dilakukan)/i,\n  /^sedang\\s*(dicek|diperbaiki|proses)/i, /^lagi\\s*(diperbaiki|cek)/i,\n  /^mau\\s*(coba|restart|cek)/i, /^coba\\s*(restart|reboot|reset)/i\n];\n\nfunction isActionCompleted(content) {\n  if (!content || content.length < 15) return false;\n  const lower = content.toLowerCase();\n  for (const p of DISQUALIFY_PATTERNS) {\n    if (p.test(content.trim())) return false;\n  }\n  for (const kw of ACTION_VERBS) {\n    if (lower.includes(kw)) return true;\n  }\n  return false;\n}\n\nconst allMsgs = messages.filter(m =>\n  m.author && !m.author.bot && !m.pinned &&\n  m.content && m.content.length > 10 &&\n  !m.content.startsWith('!') &&\n  !m.content.includes('COMMAND') &&\n  !m.content.includes('🤖')\n);\n\nconst actionMsgs = allMsgs\n  .filter(m => isActionCompleted(m.content))\n  .map(m => ({\n    author:    m.author.username || m.author.global_name || 'User',\n    content:   m.content,\n    timestamp: m.timestamp\n  }));\n\nconsole.log(`📝 [MONITOR] Ticket #${prev.ticketId}: ${allMsgs.length} msgs → ${actionMsgs.length} completed actions`);\n\nif (actionMsgs.length < 1) {\n  console.log('⏭ [MONITOR] SKIP: No completed action messages');\n  return [];\n}\n\nreturn [{ json: {\n  threadId:        prev.threadId,\n  threadName:      prev.threadName,\n  ticketType:      prev.ticketType,\n  ticketId:        ticketInfo.ticketId,\n  ticketIssue:     ticketInfo.issue,\n  currentTimeline: ticketInfo.currentTimeline,\n  discussions:     actionMsgs.reverse().slice(0, 15),\n  totalMessages:   allMsgs.length,\n  actionCount:     actionMsgs.length,\n  mode:            'MONITORING'\n}}];"
+      },
+      "id": "4580d3d7-5667-41aa-9cd1-644ad381046c",
+      "name": "Extract (Monitor Mode)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6528, 1632]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// EXTRACT (CLOSING MODE) — v4 + Repair Detection\n// Prisma fix:\n//   - Cek DB via GET /api/ticket/:id\n//   - Response field: ticket.summaryTicket (camelCase dari normalizeTicket)\n//   - ticketInfo.ticketId fallback ke event router jika pinned tidak ada\n//   - discordHasSummary cek format message dari discord.service.js:\n//       buildTicketInfoMessage  → \"**Summary:**\"\n//       buildIncidentInfoMessage → \"**Handling:**\" (bukan Summary)\n// ================================================================\nconst messages = $input.all().map(i => i.json);\nconst prev     = $node['Event Router'].json;\n\n// ── Extract info dari pinned message ──────────────────────────\nconst pinnedMsg = messages.find(m => m.pinned && m.content && !m.content.includes('COMMAND'));\nlet ticketInfo  = {\n  ticketId:         null,\n  issue:            'Unknown',\n  timeline:         '',\n  discordHasSummary: false\n};\n\nif (pinnedMsg) {\n  const c = pinnedMsg.content || '';\n\n  // Ticket ID — format dari buildTicketInfoMessage/buildIncidentInfoMessage\n  const idM = c.match(/#(\\d+)_(Support|Incident)/);\n  if (idM) ticketInfo.ticketId = idM[1];\n\n  // Judul tiket\n  const issM =\n    c.match(/\\*\\*Title\\s*:\\*\\*\\s*(.+?)\\n/) ||\n    c.match(/\\*\\*Incident Information\\s*:\\*\\*\\s*(.+?)\\n/) ||\n    c.match(/\\*\\*Issue\\s*:\\*\\*\\s*(.+?)\\n/);\n  if (issM) ticketInfo.issue = issM[1].trim();\n\n  // Timeline dari Discord\n  const tlM =\n    c.match(/\\*\\*Action Taken:\\*\\*\\s*([\\s\\S]*?)(?:\\*\\*Evidence|\\*\\*Handling|$)/) ||\n    c.match(/\\*\\*Tindak Lanjut:\\*\\*\\s*([\\s\\S]*?)(?:\\*\\*Evidence|\\*\\*Summary|$)/);\n  if (tlM) ticketInfo.timeline = tlM[1].trim();\n\n  // Cek apakah summary/handling sudah tampil di Discord\n  // INCIDENT → \"**Handling:**\" | TICKETING → \"**Summary:**\"\n  ticketInfo.discordHasSummary =\n    c.includes('**Summary:**') ||\n    c.includes('**Handling:**') ||\n    c.includes('📋 **Summary:**') ||\n    c.includes('📋 **Handling:**');\n}\n\n// Fallback ticketId dari event router\nif (!ticketInfo.ticketId) {\n  if (prev.ticketId) {\n    ticketInfo.ticketId = String(prev.ticketId);\n    console.log(`⚠️  [CLOSING] Pinned not found — fallback ticketId: ${prev.ticketId}`);\n  } else {\n    console.log('⏭ [CLOSING] SKIP: No ticket ID');\n    return [];\n  }\n}\n\n// ── Cek DB via API — apakah summary sudah ada di database ─────\n// FIX PRISMA: response ticket menggunakan camelCase:\n//   ticket.summaryTicket (bukan ticket.summary_ticket)\n//   ticket.rootCause     (bukan ticket.root_cause)\nlet dbSummary  = null;\nlet dbRootCause = null;\ntry {\n  const dbRes = await $httpRequest({\n    method: 'GET',\n    url:    `http://formbricks-discord-bot:3000/api/ticket/${ticketInfo.ticketId}`,\n    headers: { 'X-API-Key': 'automation_ticketing01_incident02' }\n  });\n  // Response: { success: true, ticket: { summaryTicket, rootCause, ... } }\n  dbSummary   = dbRes?.ticket?.summaryTicket || null;\n  dbRootCause = dbRes?.ticket?.rootCause     || null;\n  console.log(`🗄️  [CLOSING] DB summaryTicket exists: ${!!dbSummary} | rootCause: ${!!dbRootCause}`);\n} catch (e) {\n  console.warn(`⚠️  [CLOSING] DB fetch failed: ${e.message}`);\n}\n\n// ── Decision Tree ──────────────────────────────────────────────\n// C: Ada di DB DAN di Discord → fully synced → STOP\nif (dbSummary && ticketInfo.discordHasSummary) {\n  console.log('⏭ [CLOSING] SKIP: Summary fully synced (DB + Discord)');\n  return [];\n}\n\n// B: Ada di DB tapi BELUM di Discord → REPAIR (skip AI generation)\nif (dbSummary && !ticketInfo.discordHasSummary) {\n  console.log(`🔧 [CLOSING] REPAIR: summaryTicket in DB but Discord not synced`);\n  return [{ json: {\n    threadId:   prev.threadId,\n    ticketId:   ticketInfo.ticketId,\n    ticketType: prev.ticketType,\n    mode:       'REPAIR'\n  }}];\n}\n\n// A: Belum ada di DB → normal CLOSING (generate via AI)\n// Pastikan ada timeline untuk AI\nif (!ticketInfo.timeline) {\n  console.log('⏭ [CLOSING] SKIP: No timeline available for AI');\n  return [];\n}\n\n// ── Filter diskusi relevan untuk AI ───────────────────────────\nconst CLOSING_KEYWORDS = [\n  'selesai','resolved','completed','fixed','solved','berhasil',\n  'sudah normal','sudah berfungsi','sudah diperbaiki','kembali normal',\n  'tidak ada masalah','working now','problem solved','issue fixed',\n  'berfungsi kembali','sudah teratasi','sudah dinormalisasi','restored'\n];\n\nconst DISQUALIFY = [\n  /^ok(e)?$/i, /^ya$/i, /^iya$/i, /^baik$/i, /^siap$/i, /^noted$/i,\n  /^thanks?/i, /^terima\\s*kasih/i, /^\\?+$/\n];\n\nfunction isClosingRelevant(c) {\n  if (!c || c.length < 15) return false;\n  for (const p of DISQUALIFY) if (p.test(c.trim())) return false;\n  const lower = c.toLowerCase();\n  for (const kw of CLOSING_KEYWORDS) if (lower.includes(kw)) return true;\n  if (c.length >= 40) return true;\n  return false;\n}\n\nconst allMsgs = messages.filter(m =>\n  m.author && !m.author.bot && !m.pinned &&\n  m.content && !m.content.startsWith('!') &&\n  !m.content.includes('COMMAND') && !m.content.includes('🤖')\n);\n\nconst relevant = allMsgs\n  .filter(m => isClosingRelevant(m.content))\n  .map(m => ({\n    author:    m.author.username || m.author.global_name || 'User',\n    content:   m.content,\n    timestamp: m.timestamp\n  }));\n\nconsole.log(`📝 [CLOSING] ${allMsgs.length} msgs → ${relevant.length} relevant for AI`);\n\nif (relevant.length < 2) {\n  console.log(`⏭ [CLOSING] SKIP: Insufficient messages (${relevant.length} < 2)`);\n  return [];\n}\n\nconsole.log(`✅ [CLOSING] PROCEED TO AI: ${relevant.length} msgs, ticket #${ticketInfo.ticketId}`);\n\nreturn [{ json: {\n  threadId:        prev.threadId,\n  threadName:      prev.threadName,\n  ticketType:      prev.ticketType,\n  ticketId:        ticketInfo.ticketId,\n  ticketIssue:     ticketInfo.issue,\n  timeline:        ticketInfo.timeline,\n  discussions:     relevant.reverse().slice(0, 30),\n  discussionCount: relevant.length,\n  mode:            'CLOSING'\n}}];"
+      },
+      "id": "064fb581-1abd-4a26-89b9-590ceec6f937",
+      "name": "Extract (Closing Mode)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6528, 1824]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// BUILD AI PROMPT — handle REPAIR bypass + MONITORING + CLOSING\n// Tidak ada perubahan konsep — hanya penguatan guard dan komentar.\n// ================================================================\nconst data = $input.first().json;\nconst mode = (data.mode || '').toUpperCase();\n\nif (!mode) return [];\n\n// ── REPAIR: pass-through tanpa AI generation ──────────────────\n// Data summaryTicket sudah ada di DB, hanya perlu Discord sync via repair-discord\nif (mode === 'REPAIR') {\n  console.log(`🔧 [BUILD] REPAIR mode — Ticket #${data.ticketId} (skip AI)`);\n  return [{ json: {\n    threadId:   data.threadId,\n    ticketId:   data.ticketId,\n    ticketType: data.ticketType,\n    mode:       'REPAIR',\n    prompt:     `Return exactly this JSON without any extra text: {\"mode\":\"REPAIR\",\"ticketId\":\"${data.ticketId}\"}`\n  }}];\n}\n\nif (mode !== 'MONITORING' && mode !== 'CLOSING') return [];\n\n// ── Format discussion messages ────────────────────────────────\nconst msgsText = (data.discussions || []).map((m, i) =>\n  `[${i + 1}] ${m.author} (${m.timestamp}): ${m.content}`\n).join('\\n');\n\nconsole.log(`🤖 [BUILD] ${mode} prompt for Ticket #${data.ticketId} (${data.ticketType})`);\n\n// ── MONITORING prompt ─────────────────────────────────────────\n// Tugas: ekstrak NEW completed actions → append ke timeline di DB\n// API target: POST /api/ticket/timeline/append\n//   { ticketId, ticketType, newTimeline: [{ datetime, action }] }\nif (mode === 'MONITORING') {\n  const prompt = `You are a precise IT support timeline extractor. Timezone: WIB (Asia/Jakarta, UTC+7).\n\nCURRENT TIMELINE (already recorded in DB — DO NOT duplicate):\n${data.currentTimeline || '(Empty — no entries yet)'}\n\nNEW MESSAGES (pre-filtered completed actions only):\n${msgsText}\n\nTASK: Extract ONLY NEW completed technical actions NOT already in the current timeline above.\nEach action must be a CONCRETE COMPLETED step that contributed to resolving the issue.\nDo NOT include: discussions, questions, status checks, future plans, or acknowledgements.\n\nOUTPUT (valid JSON only — no markdown, no explanation):\n{\n  \"shouldUpdate\": true,\n  \"newTimeline\": [\n    { \"datetime\": \"HH:MM WIB, DD/MM/YYYY\", \"action\": \"Specific completed action description\" }\n  ]\n}\n\nIf nothing new to add: { \"shouldUpdate\": false, \"newTimeline\": [] }\n\nRULES:\n- Convert message timestamp to WIB 24-hour format\n- English only, professional, concise\n- Max 2 sentences per action entry\n- Only COMPLETED actions — never plans or ongoing work`;\n\n  return [{ json: {\n    threadId:   data.threadId,\n    ticketId:   data.ticketId,\n    ticketType: data.ticketType,\n    mode:       'MONITORING',\n    prompt\n  }}];\n}\n\n// ── CLOSING prompt ────────────────────────────────────────────\n// Tugas: generate summary + rootCause + keywords\n// API target: POST /api/ticket/summary\n//   { ticketId, summary, rootCause, keywords }\n// Prisma field mapping:\n//   summary   → DB: summary_ticket  | Discord: **Summary:** (TICKETING) / **Handling:** (INCIDENT)\n//   rootCause → DB: root_cause      | Discord: TIDAK tampil (hanya via chatbot)\n//   keywords  → DB: search_keywords | Digunakan untuk pencarian tiket serupa\nif (mode === 'CLOSING') {\n  const prompt = `You are an IT resolution analyst. Analyze this resolved ticket and generate a concise professional summary.\n\nTICKET INFO:\n- Type: ${data.ticketType}\n- Issue: ${data.ticketIssue}\n\nTIMELINE OF ACTIONS TAKEN:\n${data.timeline}\n\nCLOSING DISCUSSION:\n${msgsText}\n\nTASK: Generate summary, root cause, and search keywords for this resolved ticket.\n\nOUTPUT (valid JSON only — no markdown, no explanation, directly parseable):\n{\n  \"summary\": \"2-3 sentences describing HOW the issue was resolved and what actions were taken\",\n  \"rootCause\": \"Specific technical cause of the issue — be precise and technical\",\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\", \"keyword4\", \"keyword5\"]\n}\n\nRULES:\n- English only, professional, concise\n- summary: focus on RESOLUTION (not the problem itself)\n- rootCause: be technically specific (e.g. 'Switch port 24 misconfigured VLAN 10' not 'network issue')\n- keywords: 3-6 lowercase words for similarity search\n- Total response under 300 words`;\n\n  return [{ json: {\n    threadId:    data.threadId,\n    ticketId:    data.ticketId,\n    ticketType:  data.ticketType,\n    ticketIssue: data.ticketIssue,\n    timeline:    data.timeline,\n    mode:        'CLOSING',\n    prompt\n  }}];\n}\n\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6752, 1728],
+      "id": "bc9578e0-0015-4b93-bab3-f97ced005ccb",
+      "name": "Build AI Prompt"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are an expert IT support analyst. Return ONLY valid JSON — no markdown, no explanation, no extra text. Your entire response must be directly parseable by JSON.parse(). Do not include ```json or ``` markers."
+        }
+      },
+      "id": "21c41684-38b3-4643-9741-e2b827a1744c",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [6976, 1728],
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 1000,
+          "temperature": 0.1
+        }
+      },
+      "id": "650ef257-8bdf-4804-a03b-0453713a08ef",
+      "name": "Groq Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [7040, 1952],
+      "credentials": {
+        "groqApi": {
+          "id": "fhGezXkMzUhr4rSu",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// PARSE & ROUTE OUTPUT — handle REPAIR bypass\n// Prisma fix:\n//   - MONITORING output → POST /api/ticket/timeline/append\n//     body: { ticketId (Number), ticketType, newTimeline: [{datetime, action}] }\n//   - CLOSING output  → POST /api/ticket/summary\n//     body: { ticketId (Number), summary, rootCause, keywords }\n//   - REPAIR output   → POST /api/ticket/repair-discord\n//     body: { ticketId (Number) }\n//   - ticketId selalu dikirim sebagai Number (bukan String)\n//     karena schema Prisma: id Int @id @default(autoincrement())\n// ================================================================\nconst aiResp = $input.first().json;\nconst src    = $('Build AI Prompt').first().json;\nconst mode   = (src.mode || '').toUpperCase();\nconst aiOut  = aiResp.output || aiResp.text || '';\n\nconsole.log(`=== [PARSE] mode: ${mode} | AI output len: ${aiOut.length} | ticketId: ${src.ticketId}`);\n\n// ── REPAIR: bypass AI — route ke repair-discord endpoint ──────\nif (mode === 'REPAIR') {\n  console.log('🔧 [PARSE] REPAIR — routing to repair-discord endpoint');\n  return [{ json: {\n    threadId:   src.threadId,\n    ticketId:   Number(src.ticketId),\n    ticketType: src.ticketType,\n    mode:       'REPAIR'\n  }}];\n}\n\nif (mode !== 'MONITORING' && mode !== 'CLOSING') {\n  console.log(`⚠️  [PARSE] Unknown mode: ${mode}`);\n  return [{ json: { error: 'Invalid mode', mode } }];\n}\n\nif (!aiOut.trim()) {\n  console.log(`⚠️  [PARSE] Empty AI output for mode: ${mode}`);\n  return [{ json: { error: 'Empty AI output', mode } }];\n}\n\n// ── Parse JSON dari AI output ──────────────────────────────────\ntry {\n  // Strip markdown code fences jika ada\n  let cleaned = aiOut.trim()\n    .replace(/```json\\s*/gi, '')\n    .replace(/```\\s*/gi, '');\n\n  // Ekstrak JSON object (dari { hingga })\n  const s = cleaned.indexOf('{');\n  const e = cleaned.lastIndexOf('}');\n  if (s === -1 || e === -1) {\n    console.log(`⚠️  [PARSE] No JSON object found in AI output`);\n    return [{ json: { error: 'No JSON found in AI output', mode, rawOutput: aiOut.substring(0, 200) } }];\n  }\n\n  const parsed = JSON.parse(cleaned.substring(s, e + 1));\n  console.log(`✅ [PARSE] JSON parsed OK — keys: ${Object.keys(parsed).join(', ')}`);\n\n  // ── MONITORING: extract newTimeline entries ──────────────────\n  if (mode === 'MONITORING') {\n    if (!parsed.hasOwnProperty('shouldUpdate')) {\n      return [{ json: { error: 'Missing shouldUpdate in AI output', mode } }];\n    }\n    if (!parsed.shouldUpdate || !Array.isArray(parsed.newTimeline) || parsed.newTimeline.length === 0) {\n      console.log('⏭ [PARSE] MONITORING: No new timeline entries to add');\n      return [];\n    }\n    // Validasi setiap entry memiliki datetime & action\n    const validEntries = parsed.newTimeline.filter(e => e && e.datetime && e.action);\n    if (validEntries.length === 0) {\n      console.log('⏭ [PARSE] MONITORING: newTimeline entries invalid (missing datetime/action)');\n      return [];\n    }\n    console.log(`✅ [PARSE] MONITORING: ${validEntries.length} valid entries for ticket #${src.ticketId}`);\n    return [{ json: {\n      threadId:    src.threadId,\n      ticketId:    Number(src.ticketId),\n      ticketType:  src.ticketType,\n      newTimeline: validEntries,\n      mode:        'MONITORING'\n    }}];\n  }\n\n  // ── CLOSING: extract summary, rootCause, keywords ────────────\n  if (mode === 'CLOSING') {\n    if (!parsed.summary || !parsed.rootCause) {\n      console.log('⚠️  [PARSE] CLOSING: Missing summary or rootCause in AI output');\n      return [{ json: { error: 'Missing summary or rootCause in AI output', mode, keys: Object.keys(parsed) } }];\n    }\n    console.log(`✅ [PARSE] CLOSING: summary & rootCause ready for ticket #${src.ticketId}`);\n    return [{ json: {\n      threadId:    src.threadId,\n      ticketId:    Number(src.ticketId),\n      ticketType:  src.ticketType,\n      ticketIssue: src.ticketIssue,\n      timeline:    src.timeline,\n      summary:     String(parsed.summary).trim(),\n      rootCause:   String(parsed.rootCause).trim(),\n      keywords:    Array.isArray(parsed.keywords) ? parsed.keywords.map(String) : [],\n      mode:        'CLOSING'\n    }}];\n  }\n\n  return [];\n\n} catch (err) {\n  console.error(`❌ [PARSE] JSON parse exception: ${err.message}`);\n  return [{ json: {\n    error:     'JSON parse exception',\n    message:   err.message,\n    mode,\n    rawOutput: aiOut.substring(0, 300)\n  }}];\n}"
+      },
+      "id": "a7047ea7-b9d9-415a-98b8-a8c9e22d3d00",
+      "name": "Parse & Route Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7328, 1728]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "mode-check-prod",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "=MONITORING",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c36b1e56-d4b0-4890-8810-64bfb1db24cb",
+      "name": "Route to API",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [7552, 1728]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://formbricks-discord-bot:3000/api/ticket/timeline/append",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "automation_ticketing01_incident02"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"ticketId\": Number($json.ticketId), \"ticketType\": $json.ticketType, \"newTimeline\": $json.newTimeline } }}",
+        "options": {}
+      },
+      "id": "82dca38e-39ed-476b-8de8-ad48c9643bc6",
+      "name": "API: Append Timeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [7776, 1632]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.mode === 'REPAIR' ? 'http://formbricks-discord-bot:3000/api/ticket/repair-discord' : 'http://formbricks-discord-bot:3000/api/ticket/summary' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "automation_ticketing01_incident02"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.mode === 'REPAIR'\n  ? { \"ticketId\": Number($json.ticketId) }\n  : {\n      \"ticketId\":  Number($json.ticketId),\n      \"summary\":   $json.summary,\n      \"rootCause\": $json.rootCause,\n      \"keywords\":  Array.isArray($json.keywords) ? $json.keywords : []\n    }\n}}",
+        "options": {}
+      },
+      "id": "cf3b8b80-3bd6-4560-bfed-febac66f424e",
+      "name": "API: Save Summary & Root Cause",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [7776, 1824]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Discord Activity": {
+      "main": [
+        [{ "node": "Event Router", "type": "main", "index": 0 }]
+      ]
+    },
+    "Event Router": {
+      "main": [
+        [{ "node": "Route by Mode", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Mode": {
+      "main": [
+        [{ "node": "Get Messages (Monitor)", "type": "main", "index": 0 }],
+        [{ "node": "Get Messages (Closing)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Messages (Monitor)": {
+      "main": [
+        [{ "node": "Extract (Monitor Mode)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Messages (Closing)": {
+      "main": [
+        [{ "node": "Extract (Closing Mode)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract (Monitor Mode)": {
+      "main": [
+        [{ "node": "Build AI Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract (Closing Mode)": {
+      "main": [
+        [{ "node": "Build AI Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [{ "node": "AI Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [{ "node": "Parse & Route Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Groq Model": {
+      "ai_languageModel": [
+        [{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]
+      ]
+    },
+    "Parse & Route Output": {
+      "main": [
+        [{ "node": "Route to API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route to API": {
+      "main": [
+        [{ "node": "API: Append Timeline", "type": "main", "index": 0 }],
+        [{ "node": "API: Save Summary & Root Cause", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "50a5516e-654f-4d60-9c35-f90602df58f2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "13b85f1478965eb3621f68cda7550531bc68241d1795e1d4178ee46cbf682d06"
+  },
+  "id": "gjxe-uXFYpLuWktmreufx",
+  "tags": []
+}

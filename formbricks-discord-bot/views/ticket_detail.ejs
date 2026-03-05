@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%
+    const fields    = (ticket.form_fields || ticket.formFields || {});
+    const isIncident= ticket.type === 'INCIDENT';
+    const title     = isIncident
+                      ? (fields['Incident Information'] || 'Incident Report')
+                      : (fields['Issue'] || fields['Judul'] || fields['Title'] || 'Tiket Support');
+    const status    = ticket.status_pengusulan || ticket.statusPengusulan || 'OPEN';
+  %>
+  <title>#<%= ticket.id %> — <%= title %></title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; padding: 18px 32px; display: flex; align-items: center; gap: 12px; }
+    .header a { color: #a0aec0; text-decoration: none; font-size: .85rem; }
+    .header a:hover { color: #fff; }
+    .header-title { font-size: 1.1rem; font-weight: 700; }
+    .header-sub { font-size: .78rem; color: #a0aec0; margin-left: auto; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 32px; }
+
+    /* ── Top bar ── */
+    .top-bar { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .top-bar h2 { font-size: 1.25rem; font-weight: 700; flex: 1; line-height: 1.3; }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+    .badge { display: inline-block; padding: 4px 11px; border-radius: 99px; font-size: .75rem; font-weight: 600; letter-spacing: .3px; }
+    .badge-TICKETING  { background: #ebf4ff; color: #3182ce; }
+    .badge-INCIDENT   { background: #fff5f5; color: #c53030; }
+    .badge-OPEN       { background: #f0fff4; color: #276749; }
+    .badge-APPROVED   { background: #ebf4ff; color: #2b6cb0; }
+    .badge-PENDING    { background: #fffaf0; color: #c05621; }
+    .badge-REJECT     { background: #fff5f5; color: #c53030; }
+    .badge-DONE       { background: #e2e8f0; color: #4a5568; }
+    .badge-RESOLVED   { background: #f0fff4; color: #276749; }
+    .badge-default    { background: #e2e8f0; color: #4a5568; }
+
+    /* ── Grid layout ── */
+    .grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ── Cards ── */
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; margin-bottom: 20px; }
+    .card-header { padding: 12px 18px; background: #2d3748; color: #e2e8f0; font-size: .82rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .card-header.incident { background: #742a2a; }
+    .card-body { padding: 16px 18px; }
+
+    /* ── Field pairs ── */
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 600px) { .field-grid { grid-template-columns: 1fr; } }
+    .field { margin-bottom: 2px; }
+    .field-label { font-size: .72rem; color: #718096; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; font-weight: 600; }
+    .field-value { font-size: .88rem; color: #2d3748; word-break: break-word; }
+    .field-value.mono { font-family: monospace; font-size: .82rem; color: #553c9a; }
+    .field-value a { color: #667eea; }
+    .field-full { grid-column: 1 / -1; }
+
+    /* ── Form fields table ── */
+    .form-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+    .form-table th { background: #edf2f7; padding: 8px 12px; text-align: left; font-weight: 600; font-size: .76rem; color: #4a5568; text-transform: uppercase; letter-spacing: .3px; width: 38%; border-bottom: 1px solid #e2e8f0; }
+    .form-table td { padding: 8px 12px; border-bottom: 1px solid #f7fafc; color: #2d3748; vertical-align: top; word-break: break-word; }
+    .form-table tr:last-child th, .form-table tr:last-child td { border-bottom: none; }
+
+    /* ── Timeline ── */
+    .timeline { list-style: none; position: relative; padding-left: 20px; }
+    .timeline::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; }
+    .timeline li { position: relative; margin-bottom: 14px; }
+    .timeline li::before { content: ''; position: absolute; left: -17px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: #667eea; border: 2px solid #fff; box-shadow: 0 0 0 2px #667eea; }
+    .timeline-date { font-size: .72rem; color: #a0aec0; margin-bottom: 2px; }
+    .timeline-action { font-size: .84rem; font-weight: 600; color: #2d3748; }
+    .timeline-note { font-size: .8rem; color: #4a5568; margin-top: 2px; }
+    .timeline-user { font-size: .72rem; color: #718096; margin-top: 2px; }
+
+    /* ── Activity log ── */
+    .activity-item { padding: 8px 0; border-bottom: 1px solid #f7fafc; font-size: .82rem; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-time { font-size: .72rem; color: #a0aec0; margin-bottom: 2px; }
+    .activity-text { color: #4a5568; }
+
+    /* ── Summary / root cause ── */
+    .text-block { background: #f7fafc; border-left: 3px solid #667eea; padding: 12px 14px; border-radius: 0 6px 6px 0; font-size: .85rem; line-height: 1.6; color: #4a5568; white-space: pre-wrap; word-break: break-word; }
+    .text-block.incident { border-color: #fc8181; }
+
+    /* ── Assignee list ── */
+    .assignee-list { display: flex; flex-direction: column; gap: 6px; }
+    .assignee-item { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+    .assignee-avatar { width: 28px; height: 28px; border-radius: 50%; background: #667eea; color: #fff; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; flex-shrink: 0; }
+
+    /* ── Evidence ── */
+    .evidence-list { list-style: none; }
+    .evidence-list li { padding: 4px 0; font-size: .82rem; }
+    .evidence-list a { color: #667eea; word-break: break-all; }
+
+    /* ── Discord info ── */
+    .discord-info { display: flex; flex-direction: column; gap: 6px; }
+    .discord-row { display: flex; gap: 8px; align-items: center; font-size: .82rem; }
+    .discord-label { color: #718096; min-width: 80px; font-size: .75rem; }
+    .discord-value { color: #2d3748; font-family: monospace; font-size: .8rem; word-break: break-all; }
+
+    /* ── Report button ── */
+    .btn-report { display: inline-block; padding: 8px 20px; background: #e53e3e; color: #fff; border-radius: 6px; text-decoration: none; font-size: .85rem; font-weight: 600; margin-top: 8px; }
+    .btn-report:hover { background: #c53030; }
+
+    .empty-text { color: #a0aec0; font-size: .82rem; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/">← Dashboard</a>
+  <span style="color:#4a5568">/</span>
+  <span class="header-title">#<%= ticket.id %> — <%= title %></span>
+  <span class="header-sub"><%= orgName %> — <%= orgDepartment %></span>
+</div>
+
+<div class="container">
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div style="flex:1">
+      <h2><%= isIncident ? '🚨' : '🎫' %> <%= title %></h2>
+      <div class="badges" style="margin-top:8px">
+        <span class="badge badge-<%= ticket.type %>"><%= ticket.type %></span>
+        <span class="badge badge-<%= status %>"><%= status %></span>
+        <% if (ticket.form_id === 'chatbot_auto_create') { %>
+        <span class="badge" style="background:#e9d8fd;color:#553c9a">🤖 chatbot</span>
+        <% } %>
+      </div>
+    </div>
+    <div style="text-align:right;font-size:.78rem;color:#718096">
+      <div>Dibuat: <strong><%= ticket.created_at ? new Date(ticket.created_at).toLocaleString('id-ID') : '—' %></strong></div>
+      <div>Diperbarui: <strong><%= ticket.updated_at ? new Date(ticket.updated_at).toLocaleString('id-ID') : '—' %></strong></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left column -->
+    <div>
+
+      <!-- Form Fields -->
+      <div class="card">
+        <div class="card-header <%= isIncident ? 'incident' : '' %>">📋 Data Formulir</div>
+        <div class="card-body" style="padding:0">
+          <% const formFields = (ticket.form_fields || ticket.formFields || {}); %>
+          <% if (Object.keys(formFields).length === 0) { %>
+          <div style="padding:16px 18px" class="empty-text">Tidak ada data formulir</div>
+          <% } else { %>
+          <table class="form-table">
+            <% Object.entries(formFields).forEach(([k,v]) => { %>
+            <tr>
+              <th><%= k %></th>
+              <td><%= Array.isArray(v) ? v.join(', ') : (v || '—') %></td>
+            </tr>
+            <% }) %>
+          </table>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <% if (ticket.summary_ticket || ticket.summaryTicket) { %>
+      <div class="card">
+        <div class="card-header">📝 Ringkasan</div>
+        <div class="card-body">
+          <div class="text-block <%= isIncident ? 'incident' : '' %>"><%= ticket.summary_ticket || ticket.summaryTicket %></div>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Root Cause (Incident only) -->
+      <% if (isIncident && (ticket.root_cause || ticket.rootCause)) { %>
+      <div class="card">
+        <div class="card-header incident">🔍 Root Cause</div>
+        <div class="card-body">
+          <div class="text-block incident"><%= ticket.root_cause || ticket.rootCause %></div>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Timeline -->
+      <% const timeline = ticket.timeline_tindak_lanjut || ticket.timelineTindakLanjut || []; %>
+      <% const actionTaken = ticket.timeline_action_taken || ticket.timelineActionTaken || []; %>
+      <% if ((Array.isArray(timeline) && timeline.length > 0) || (Array.isArray(actionTaken) && actionTaken.length > 0)) { %>
+      <div class="card">
+        <div class="card-header">📅 Timeline Tindak Lanjut</div>
+        <div class="card-body">
+          <ul class="timeline">
+            <% ;[...timeline, ...actionTaken].sort((a,b)=>new Date(a.timestamp||a.date||0)-new Date(b.timestamp||b.date||0)).forEach(item => { %>
+            <li>
+              <div class="timeline-date"><%= item.timestamp ? new Date(item.timestamp).toLocaleString('id-ID') : (item.date || '') %></div>
+              <div class="timeline-action"><%= item.action || item.status || '' %></div>
+              <% if (item.note) { %><div class="timeline-note"><%= item.note %></div><% } %>
+              <% if (item.actionBy || item.by) { %><div class="timeline-user">👤 <%= item.actionBy || item.by %></div><% } %>
+            </li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Activity Log -->
+      <% if (activities && activities.length > 0) { %>
+      <div class="card">
+        <div class="card-header">📋 Log Aktivitas</div>
+        <div class="card-body">
+          <% activities.forEach(act => { %>
+          <div class="activity-item">
+            <div class="activity-time"><%= act.created_at ? new Date(act.created_at).toLocaleString('id-ID') : '' %></div>
+            <div class="activity-text"><%= act.description || act.action || act.type || JSON.stringify(act) %></div>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Evidence -->
+      <% const evidence = ticket.evidence_attachment || ticket.evidenceAttachment || []; %>
+      <% if (Array.isArray(evidence) && evidence.length > 0) { %>
+      <div class="card">
+        <div class="card-header">🔗 Evidence / Lampiran</div>
+        <div class="card-body">
+          <ul class="evidence-list">
+            <% evidence.forEach((e, i) => { %>
+            <li>
+              <% const eStr = typeof e === 'string' ? e : (e.url || e.link || JSON.stringify(e)); %>
+              <% if (eStr.startsWith('http')) { %>
+              <a href="<%= eStr %>" target="_blank" rel="noopener">📎 Lampiran <%= i+1 %>: <%= eStr %></a>
+              <% } else { %>
+              📎 <%= eStr %>
+              <% } %>
+            </li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+      <% } %>
+
+    </div>
+
+    <!-- Right column -->
+    <div>
+
+      <!-- Meta info -->
+      <div class="card">
+        <div class="card-header">ℹ️ Informasi Tiket</div>
+        <div class="card-body">
+          <div class="field-grid">
+            <div class="field">
+              <div class="field-label">ID Tiket</div>
+              <div class="field-value mono">#<%= ticket.id %></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Tipe</div>
+              <div class="field-value"><%= ticket.type %></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Status</div>
+              <div class="field-value"><span class="badge badge-<%= status %>"><%= status %></span></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Form ID</div>
+              <div class="field-value mono" style="font-size:.76rem"><%= ticket.form_id || '—' %></div>
+            </div>
+            <% if (ticket.status_note || ticket.statusNote) { %>
+            <div class="field field-full">
+              <div class="field-label">Catatan Status</div>
+              <div class="field-value"><%= ticket.status_note || ticket.statusNote %></div>
+            </div>
+            <% } %>
+            <% if (ticket.resolved_at || ticket.resolvedAt) { %>
+            <div class="field field-full">
+              <div class="field-label">Diselesaikan</div>
+              <div class="field-value"><%= new Date(ticket.resolved_at || ticket.resolvedAt).toLocaleString('id-ID') %></div>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assignee -->
+      <div class="card">
+        <div class="card-header">👤 Assignee</div>
+        <div class="card-body">
+          <% const assignees = ticket.assignee || []; %>
+          <% if (!Array.isArray(assignees) || assignees.length === 0) { %>
+          <span class="empty-text">Belum ada assignee</span>
+          <% } else { %>
+          <div class="assignee-list">
+            <% assignees.forEach(a => {
+              const name = typeof a === 'string' ? a : (a.username || a.displayName || a.name || JSON.stringify(a));
+              const initial = name.charAt(0).toUpperCase();
+            %>
+            <div class="assignee-item">
+              <div class="assignee-avatar"><%= initial %></div>
+              <span><%= name %></span>
+            </div>
+            <% }) %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Discord Info -->
+      <% const discord = ticket.discord || {}; %>
+      <% if (discord.threadId || discord.threadUrl) { %>
+      <div class="card">
+        <div class="card-header">💬 Discord Thread</div>
+        <div class="card-body">
+          <div class="discord-info">
+            <% if (discord.threadId) { %>
+            <div class="discord-row">
+              <span class="discord-label">Thread ID</span>
+              <span class="discord-value"><%= discord.threadId %></span>
+            </div>
+            <% } %>
+            <% if (discord.channelId) { %>
+            <div class="discord-row">
+              <span class="discord-label">Channel ID</span>
+              <span class="discord-value"><%= discord.channelId %></span>
+            </div>
+            <% } %>
+            <% if (discord.threadUrl) { %>
+            <div class="discord-row">
+              <span class="discord-label">URL</span>
+              <span class="discord-value"><a href="<%= discord.threadUrl %>" target="_blank">Buka di Discord ↗</a></span>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Incident Report -->
+      <% if (isIncident) { %>
+      <div class="card">
+        <div class="card-header incident">📄 Laporan Insiden</div>
+        <div class="card-body">
+          <% if (ticket.report_url || ticket.reportUrl) { %>
+          <a class="btn-report" href="<%= ticket.report_url || ticket.reportUrl %>" target="_blank">
+            📄 Lihat Laporan HTML
+          </a>
+          <% } else { %>
+          <span class="empty-text">Laporan belum dibuat</span>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Search keywords -->
+      <% const kw = ticket.search_keywords || ticket.searchKeywords || []; %>
+      <% if (Array.isArray(kw) && kw.length > 0) { %>
+      <div class="card">
+        <div class="card-header">🔍 Keyword Pencarian</div>
+        <div class="card-body">
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <% kw.forEach(k => { %>
+            <span style="background:#edf2f7;color:#4a5568;padding:2px 8px;border-radius:99px;font-size:.76rem"><%= k %></span>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+      <% } %>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

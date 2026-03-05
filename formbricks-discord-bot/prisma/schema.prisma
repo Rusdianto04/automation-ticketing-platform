@@ -1,0 +1,175 @@
+// ================================================================
+// prisma/schema.prisma
+// Formbricks Discord Bot — Prisma ORM
+// Migrated from: Sequelize v6
+// Compatible with: Peppermint, n8n, raw PostgreSQL API
+//
+// PENTING:
+//   • Nama tabel & kolom IDENTIK dengan versi Sequelize
+//   • Tidak ada perubahan struktur data — kompatibel penuh
+//     dengan n8n workflows & PostgreSQL raw queries
+//   • Raw SQL pada knowledge_base, chatbot_interactions,
+//     incident_reports tetap berjalan normal
+//
+// FIX v2:
+//   • created_at / updated_at → @default(now()) @db.Timestamptz()
+//     agar Prisma client menganggap field ini OPSIONAL di input
+//     (DB yang isi via DEFAULT NOW()).
+//   • @updatedAt dihapus — diganti @default(now()) karena
+//     @updatedAt menyebabkan RenamePrimaryKey conflict di PostgreSQL.
+//   • Semua DateTime kolom diberi @db.Timestamptz() untuk
+//     konsistensi tipe data dengan schema PostgreSQL aktual.
+// ================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------
+// Tabel: tickets
+// Menyimpan tiket support & incident dari Formbricks / Discord
+// ----------------------------------------------------------------
+model Ticket {
+  id                      Int        @id @default(autoincrement())
+  type                    String     @db.VarChar(50)
+  form_id                 String     @db.VarChar(255)
+  form_fields             Json       @default("{}")
+  status_pengusulan       String     @default("OPEN") @db.VarChar(50)
+  status_note             String?
+  assignee                Json?      @default("[]")
+  timeline_tindak_lanjut  String?
+  timeline_action_taken   String?
+  evidence_attachment     Json?      @default("[]")
+  discord                 Json?
+  summary_ticket          String?
+  root_cause              String?
+  search_keywords         String[]   @default([])
+  resolved_at             DateTime?  @db.Timestamptz()
+  // FIX: @default(now()) + @db.Timestamptz() → Prisma client
+  //      menganggap field ini OPSIONAL di input create().
+  //      DB mengisi via DEFAULT NOW() jika tidak dikirim.
+  // FIX: @updatedAt dihapus — diganti @default(now()) karena
+  //      @updatedAt menyebabkan RenamePrimaryKey + AlterDefault
+  //      dalam 1 statement → PostgreSQL syntax error.
+  created_at              DateTime   @default(now()) @db.Timestamptz()
+  updated_at              DateTime   @default(now()) @db.Timestamptz()
+
+  // Relasi
+  activities Activity[]
+
+  @@index([type])
+  @@index([status_pengusulan])
+  @@index([form_id])
+  @@index([created_at])
+  // GIN index untuk search_keywords dibuat via raw SQL di migration
+
+  @@map("tickets")
+}
+
+// ----------------------------------------------------------------
+// Tabel: submissions
+// Raw payload dari Formbricks webhook
+// ----------------------------------------------------------------
+model Submission {
+  id         Int      @id @default(autoincrement())
+  form_id    String   @db.VarChar(255)
+  payload    Json
+  created_at DateTime @default(now()) @db.Timestamptz()
+
+  @@index([form_id])
+  @@index([created_at])
+
+  @@map("submissions")
+}
+
+// ----------------------------------------------------------------
+// Tabel: activities
+// Audit log per tiket (relasi ke tickets)
+// ----------------------------------------------------------------
+model Activity {
+  id          Int      @id @default(autoincrement())
+  ticket_id   Int
+  type        String   @db.VarChar(50)
+  description String?
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  ticket Ticket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
+  @@index([created_at])
+
+  @@map("activities")
+}
+
+// ----------------------------------------------------------------
+// Tabel: knowledge_base
+// Runbook & artikel KB — dikelola via raw SQL (kompatibel n8n)
+// ----------------------------------------------------------------
+model KnowledgeBase {
+  id           Int      @id @default(autoincrement())
+  category     String   @db.VarChar(100)
+  title        String   @db.VarChar(500)
+  content      String
+  keywords     String[] @default([])
+  usage_count  Int      @default(0)
+  success_rate Float    @default(0)
+  created_by   String   @default("system") @db.VarChar(100)
+  created_at   DateTime @default(now()) @db.Timestamptz()
+  // FIX: @updatedAt → @default(now()) — alasan sama seperti Ticket
+  updated_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([category])
+  @@index([usage_count])
+
+  @@map("knowledge_base")
+}
+
+// ----------------------------------------------------------------
+// Tabel: chatbot_interactions
+// Log interaksi AI chatbot — diakses via raw SQL oleh n8n
+// ----------------------------------------------------------------
+model ChatbotInteraction {
+  id                  Int      @id @default(autoincrement())
+  ticket_id           Int?
+  user_id             String   @db.VarChar(50)
+  user_name           String   @db.VarChar(255)
+  question            String
+  answer              String
+  intent              String   @default("general") @db.VarChar(50)
+  context_used        Json?    @default("{}")
+  groq_model          String?  @db.VarChar(100)
+  processing_time_ms  Int?     @default(0)
+  created_at          DateTime @default(now()) @db.Timestamptz()
+
+  @@index([ticket_id])
+  @@index([intent])
+  @@index([created_at])
+
+  @@map("chatbot_interactions")
+}
+
+// ----------------------------------------------------------------
+// Tabel: incident_reports
+// Laporan insiden yang digenerate — diakses via raw SQL
+// ----------------------------------------------------------------
+model IncidentReport {
+  id             Int      @id @default(autoincrement())
+  ticket_id      Int
+  report_type    String   @default("STANDARD") @db.VarChar(50)
+  report_title   String   @db.VarChar(500)
+  report_content Json
+  file_path      String?
+  file_url       String?
+  generated_by   String   @default("system") @db.VarChar(255)
+  generated_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([ticket_id])
+  @@index([generated_at])
+
+  @@map("incident_reports")
+}

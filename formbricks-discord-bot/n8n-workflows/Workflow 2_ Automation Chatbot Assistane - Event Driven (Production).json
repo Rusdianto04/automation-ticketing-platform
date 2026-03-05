@@ -1,0 +1,265 @@
+{
+  "name": "Workflow 2: Automation Chatbot Assistane - Event Driven (Production)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatbot-qa",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e9565ef3-ab63-4885-b3e5-584027d80037",
+      "name": "Webhook: Discord Chatbot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2208,
+        1856
+      ],
+      "webhookId": "chatbot-qa-discord"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// PARSE + SMART CONTEXT DETECTION — v2 FIXED\n// FIX: intent detection lebih cerdas — tidak trigger needsTicket\n//      hanya karena kata \"ticket\" ada di kalimat umum.\n//      Category \"general\" sekarang benar-benar general → AI pakai\n//      pengetahuan sendiri, tidak dibatasi hanya context DB.\n// ============================================================\nconst body = $input.item.json.body || {};\nconst rawQuestion = body.question || '';\nconst question = rawQuestion.toLowerCase();\n\n// Detect ticket ID — #angka eksplisit\nconst ticketIdMatch = question.match(/#(\\d+)/);\nconst detectedTicketId = ticketIdMatch ? parseInt(ticketIdMatch[1]) : (body.ticketId || body.ticket_id || null);\n\n// Extract keywords\nconst stopwords = ['yang','untuk','dari','dengan','adalah','pada','ke','di','dan','atau','jika','maka','tetapi','saya','kamu','apa','kenapa','bagaimana','kapan','siapa','tolong','bisa','tidak','ada','ini','itu','juga','sudah','belum','masih','lagi','saja','agar','supaya','setelah','sebelum','ketika','karena','sebab','oleh','namun','akan','harus','perlu','coba','mohon','info','tahu','minta','bantu','berikan','tampilkan','tunjukkan','jelaskan','buatkan','cari','coba','saran','berikan','ticket','tiket'];\nconst keywords = rawQuestion.split(/\\s+/).filter(w => w.length > 3 && !stopwords.includes(w.toLowerCase())).slice(0, 10);\n\n// ── Intent detection ──────────────────────────────────────────\n// FIX: needsTicket HANYA jika:\n//   1. Ada ticket ID eksplisit (#angka), ATAU\n//   2. Pertanyaan spesifik tentang data ticket (summary, root cause, status, dll)\n//   BUKAN hanya karena kata \"ticket\" muncul di kalimat umum\n\nlet category = 'general';\nlet needsTicket = false;\nlet needsKB = false;\nlet needsSimilar = false;\n\n// Ticket-specific: HARUS ada ticket ID atau kata kunci data spesifik\nconst isTicketDataQuery = (\n  question.includes('summary') ||\n  question.includes('root cause') ||\n  question.includes('ringkasan') ||\n  question.includes('penyebab') ||\n  question.includes('akar masalah') ||\n  question.includes('handling') ||\n  question.includes('penanganan') ||\n  question.includes('tindak lanjut') ||\n  question.includes('action taken') ||\n  question.includes('timeline')\n);\n\nif (detectedTicketId) {\n  // Ada #ID → selalu fetch ticket\n  needsTicket = true;\n  category = 'ticket_specific';\n} else if (isTicketDataQuery) {\n  // Tanya tentang data ticket tapi tanpa ID — mungkin konteks percakapan\n  needsTicket = false; // tidak bisa fetch tanpa ID\n  category = 'ticket_specific';\n}\n// FIX: \"ticket\" saja tanpa ID dan tanpa query data spesifik → general\n// User mungkin tanya \"cara buat ticket\" atau \"apa itu ticket system\" → tidak perlu DB\n\n// Troubleshooting & KB\nif (\n  question.includes('error') || question.includes('masalah') ||\n  question.includes('rusak') || question.includes('gagal') ||\n  question.includes('cara') || question.includes('tidak bisa') ||\n  question.includes('solusi') || question.includes('langkah') ||\n  question.includes('troubleshoot') || question.includes('runbook') ||\n  question.includes('perbaiki') || question.includes('kenapa') ||\n  question.includes('mengapa')\n) {\n  needsKB = true;\n  needsSimilar = true;\n  if (category === 'general') category = 'troubleshooting';\n}\n\n// Historical search\nif (\n  question.includes('mirip') || question.includes('serupa') ||\n  question.includes('pernah') || question.includes('historical') ||\n  question.includes('sebelumnya') || question.includes('kasus lain')\n) {\n  needsSimilar = true;\n  if (category === 'general') category = 'historical';\n}\n\n// Incident report\nif (\n  question.includes('incident report') ||\n  question.includes('laporan insiden') ||\n  question.includes('buatkan laporan')\n) {\n  needsTicket = true;\n  category = 'incident_report';\n}\n\n// Explanation / konsep umum IT\nif (\n  question.includes('apa itu') || question.includes('jelaskan') ||\n  question.includes('perbedaan') || question.includes('pengertian') ||\n  question.includes('definisi') || question.includes('explain')\n) {\n  needsKB = true;\n  if (category === 'general') category = 'explanation';\n}\n\n// Auto create\nif (\n  question.includes('buat ticket') || question.includes('buat tiket') ||\n  question.includes('laporkan masalah')\n) {\n  if (category === 'general') category = 'auto_create';\n}\n\n// Recommendation\nif (\n  question.includes('rekomendasi') || question.includes('saran') ||\n  question.includes('tools') || question.includes('sebaiknya')\n) {\n  needsKB = true;\n  needsSimilar = true;\n  if (category === 'general') category = 'recommendation';\n}\n\nreturn {\n  json: {\n    userId: body.userId || body.user_id || 'unknown',\n    userName: body.userName || body.user_name || 'unknown',\n    question: rawQuestion,\n    conversationHistory: Array.isArray(body.conversationHistory) ? body.conversationHistory : [],\n    detectedTicketId,\n    keywords,\n    category,\n    needsTicket,\n    needsKB,\n    needsSimilar,\n    timestamp: new Date().toISOString()\n  }\n};\n"
+      },
+      "id": "ba785605-882e-4507-8ad8-58479259dc87",
+      "name": "Parse & Detect Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        1856
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://formbricks-discord-bot:3000/api/chatbot/context",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "9c3331ec-ca3b-4064-b426-6c2458dc486a",
+      "name": "Fetch Context (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1760,
+        1856
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CHmiJtxiQZbjE54c",
+          "name": "Bot API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// BUILD AI CONTEXT — Merge all fetched data\n// FIX: defensive null/undefined guards agar tidak crash\n// jika ctx.keywords undefined, ticket fields null, dll.\n// ============================================================\nconst ctx = $('Parse & Detect Intent').item.json;\nconst fetched = $input.item.json;\n\nconst ticket = fetched.ticket || null;\nconst runbooks = fetched.runbooks || [];\nconst similarTickets = fetched.similarTickets || [];\n\n// FIX: keywords bisa undefined jika Parse node gagal / berubah struktur\nconst keywords = Array.isArray(ctx.keywords) ? ctx.keywords : [];\n\nlet contextText = `USER QUESTION: ${ctx.question || ''}\n`;\ncontextText += `CATEGORY: ${ctx.category || 'general'}\n`;\ncontextText += `KEYWORDS: ${keywords.join(', ') || '(none)'}\n\n`;\n\n// Ticket section\nif (ticket) {\n  contextText += `═══ TICKET #${ticket.id} ═══\n`;\n  if (ticket.title) contextText += `Title: ${ticket.title}\n`;\n  contextText += `Type: ${ticket.type} | Status: ${ticket.status}\n`;\n\n  // FIX: semua field bisa null — gunakan string fallback sebelum substring\n  const summaryText = ticket.summaryTicket || ticket.summary_ticket || null;\n  const rootCauseText = ticket.rootCause || ticket.root_cause || null;\n  const timelineAction = ticket.timelineActionTaken || ticket.timeline_action_taken || null;\n  const timelineTindak = ticket.timelineTindakLanjut || ticket.timeline_tindak_lanjut || null;\n\n  if (summaryText) contextText += `\n📋 SUMMARY (tampilkan langsung ke user):\n${String(summaryText).substring(0, 800)}\n`;\n  else contextText += `\n📋 SUMMARY: Belum tersedia (ticket belum DONE/RESOLVED)\n`;\n\n  if (rootCauseText) contextText += `\n🔍 ROOT CAUSE:\n${String(rootCauseText).substring(0, 500)}\n`;\n  else contextText += `\n🔍 ROOT CAUSE: Belum tersedia\n`;\n\n  if (timelineAction) contextText += `\n📅 ACTION TAKEN:\n${String(timelineAction).substring(0, 500)}\n`;\n  if (timelineTindak) contextText += `\n📅 TINDAK LANJUT:\n${String(timelineTindak).substring(0, 500)}\n`;\n\n  contextText += `\n`;\n}\n\n// Knowledge Base section\nif (runbooks.length > 0) {\n  contextText += `═══ KNOWLEDGE BASE / RUNBOOK ═══\n`;\n  runbooks.forEach((kb, i) => {\n    contextText += `\n${i+1}. [${kb.category || 'KB'}] ${kb.title || ''}\n`;\n    contextText += `${String(kb.content || '').substring(0, 400)}\n`;\n    if (kb.success_rate) contextText += `Success Rate: ${kb.success_rate}%\n`;\n  });\n  contextText += `\n`;\n} else if (ctx.needsKB) {\n  contextText += `═══ KNOWLEDGE BASE ═══\nTidak ada runbook relevan ditemukan.\n\n`;\n}\n\n// Similar Tickets section\nif (similarTickets.length > 0) {\n  contextText += `═══ HISTORICAL TICKETS SERUPA ═══\n`;\n  contextText += `(Hanya tampilkan ticket dari daftar ini. JANGAN mengarang ticket ID.)\n\n`;\n  similarTickets.forEach((t, i) => {\n    contextText += `${i+1}. Ticket #${t.ticketId} — ${t.issue || 'N/A'}\n`;\n    if (t.summary) contextText += `   Summary: ${String(t.summary).substring(0, 200)}\n`;\n    if (t.rootCause) contextText += `   Root Cause: ${String(t.rootCause).substring(0, 150)}\n`;\n  });\n  contextText += `\n`;\n} else if (ctx.needsSimilar) {\n  contextText += `═══ HISTORICAL TICKETS ═══\nTidak ada ticket serupa. JANGAN mengarang data.\n\n`;\n}\n\n// Conversation history\nif (ctx.conversationHistory && ctx.conversationHistory.length > 0) {\n  contextText += `═══ RIWAYAT PERCAKAPAN ═══\n`;\n  ctx.conversationHistory.slice(-3).forEach(turn => {\n    contextText += `User: ${turn.question}\nAI: ${String(turn.answer || '').substring(0, 100)}...\n\n`;\n  });\n}\n\n// Special instruction for incident report\nif (ctx.category === 'incident_report') {\n  contextText += `═══ INSTRUKSI KHUSUS ═══\nUser meminta Incident Report untuk ticket #${ctx.detectedTicketId}.\nBuat laporan enterprise format:\n1. Executive Summary\n2. Detail Insiden\n3. Timeline\n4. Root Cause Analysis\n5. Resolusi\n6. Rekomendasi\nGunakan data dari context ticket di atas.\n\n`;\n}\n\nreturn {\n  json: {\n    ctx,\n    contextText,\n    hasTicket: !!ticket,\n    hasKB: runbooks.length > 0,\n    hasSimilar: similarTickets.length > 0\n  }\n};"
+      },
+      "id": "dbae15ca-ba62-4893-9f9d-1845c90a0df6",
+      "name": "Build AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        1856
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.contextText }}\n\n════════════════════════════════════\nINSTRUKSI RESPONS\n════════════════════════════════════\n1. Jawab natural seperti rekan IT berpengalaman\n2. Gunakan data dari context JIKA tersedia. Jika tidak ada → gunakan pengetahuan IT Anda\n3. Jika ticket DITEMUKAN tapi summary/root cause belum ada → sampaikan data tiket yang tersedia (status, timeline, assigned team)\n   Jika ticket TIDAK DITEMUKAN di DB → sampaikan tidak ditemukan di sistem\n4. JANGAN mengarang data, ticket ID, atau informasi fiktif\n5. Untuk summary/root cause → tampilkan dari context LANGSUNG\n6. Format: markdown (bold, list, code block)\n7. Akhiri dengan tawaran bantuan lebih lanjut\n\nBahasa: Indonesia (formal namun ramah)",
+        "options": {
+          "systemMessage": "Anda adalah AI Assistant IT Support Enterprise SEAMOLEC yang profesional dan cerdas.\n\n🎯 CARA MENJAWAB:\nAnda adalah asisten IT berpengalaman seperti senior engineer + ChatGPT.\nJawab SETIAP pertanyaan dengan penuh — baik yang ada datanya di context maupun tidak.\n\n📚 PRIORITAS SUMBER JAWABAN:\n1. Jika ada CONTEXT TICKET/KB/HISTORICAL → gunakan data tersebut sebagai referensi utama\n2. Jika context TIDAK ADA atau KOSONG → gunakan pengetahuan IT Anda sendiri untuk menjawab\n3. JANGAN pernah menolak menjawab hanya karena tidak ada data di context\n\n✅ YANG BOLEH:\n- Menjawab pertanyaan umum IT (networking, hardware, software, troubleshooting) dari pengetahuan sendiri\n- Memberikan langkah troubleshooting standar meski tidak ada ticket/KB\n- Memberikan penjelasan teknis, konsep, perbandingan teknologi\n- Memberikan saran dan rekomendasi berdasarkan best practice\n- Menjawab pertanyaan dalam bahasa apapun (Indonesia/English)\n\n❌ YANG TIDAK BOLEH:\n- Mengarang ticket ID yang tidak ada di context\n- Mengklaim summary/root cause ada padahal context bilang belum tersedia\n- Membuat data fiktif tentang sistem internal\n\n📋 JIKA ADA DATA TICKET:\n- Tampilkan informasi yang tersedia (status, type, assignee, timeline)\n- Jika summary belum ada → sampaikan, lalu tetap berikan saran umum berdasarkan judulnya\n\n💬 FORMAT:\n- **bold** untuk poin penting\n- Numbered list untuk langkah\n- Code block untuk command teknis\n- Natural, tidak kaku — seperti rekan IT yang membantu\n\nBahasa: Indonesia (atau ikuti bahasa user)"
+        }
+      },
+      "id": "3c5bfcc0-8fff-4efc-8569-b615095182ad",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -1312,
+        1856
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 4000,
+          "temperature": 0.4
+        }
+      },
+      "id": "6443af0b-defc-4cdc-a130-94b0dac41873",
+      "name": "Groq Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        2080
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "fhGezXkMzUhr4rSu",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://formbricks-discord-bot:3000/api/chatbot/log-interaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "56361852-66d4-44bd-a246-bd8f92b0bee0",
+      "name": "Log Interaction (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -960,
+        1856
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CHmiJtxiQZbjE54c",
+          "name": "Bot API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"answer\": {{ JSON.stringify($('AI Agent').item.json.output || $('AI Agent').item.json.text || '') }},\n  \"questionCategory\": \"{{ $('Parse & Detect Intent').item.json.category }}\",\n  \"context\": {\n    \"hadTicket\": {{ $('Build AI Context').item.json.hasTicket }},\n    \"hadKnowledge\": {{ $('Build AI Context').item.json.hasKB }},\n    \"hadSimilar\": {{ $('Build AI Context').item.json.hasSimilar }}\n  },\n  \"processingTimeMs\": {{ Date.now() - new Date($('Parse & Detect Intent').item.json.timestamp).getTime() }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "8c45ccbd-bc63-4a33-9c31-9fd4576d9041",
+      "name": "Respond to Discord",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -736,
+        1856
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Discord Chatbot": {
+      "main": [
+        [
+          {
+            "node": "Parse & Detect Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Detect Intent": {
+      "main": [
+        [
+          {
+            "node": "Fetch Context (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Context (API)": {
+      "main": [
+        [
+          {
+            "node": "Build AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Context": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Log Interaction (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Interaction (API)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "7a4f6b6c-f63f-4ceb-b32a-5d851b710e2e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "13b85f1478965eb3621f68cda7550531bc68241d1795e1d4178ee46cbf682d06"
+  },
+  "id": "FzUgBdMN9HClQtAgAcv8A",
+  "tags": []
+}

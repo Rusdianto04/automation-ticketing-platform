@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Tiket — <%= orgName %></title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    /* ── Header ── */
+    .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .header-left h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .5px; }
+    .header-left p  { font-size: .82rem; color: #a0aec0; margin-top: 2px; }
+    .header-right   { font-size: .8rem; color: #718096; text-align: right; }
+
+    /* ── Stats bar ── */
+    .stats { display: flex; gap: 16px; padding: 20px 32px; flex-wrap: wrap; }
+    .stat-card { background: #fff; border-radius: 10px; padding: 16px 22px; flex: 1; min-width: 140px; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid #667eea; }
+    .stat-card.open       { border-color: #48bb78; }
+    .stat-card.pending    { border-color: #ed8936; }
+    .stat-card.resolved   { border-color: #4299e1; }
+    .stat-card.incident   { border-color: #fc8181; }
+    .stat-card .label { font-size: .72rem; color: #718096; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #2d3748; }
+
+    /* ── Filters ── */
+    .filters { padding: 0 32px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .filters label { font-size: .82rem; color: #4a5568; font-weight: 500; }
+    .filters select, .filters input { padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: .82rem; background: #fff; color: #2d3748; outline: none; }
+    .filters select:focus, .filters input:focus { border-color: #667eea; }
+    .btn-refresh { padding: 6px 16px; background: #667eea; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: .82rem; margin-left: auto; }
+    .btn-refresh:hover { background: #5a67d8; }
+
+    /* ── Table ── */
+    .table-wrap { padding: 0 32px 32px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; font-size: .85rem; }
+    thead { background: #2d3748; color: #e2e8f0; }
+    th { padding: 12px 14px; text-align: left; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+    td { padding: 11px 14px; border-bottom: 1px solid #f7fafc; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f7fafc; }
+    tr.incident-row td { background: #fff5f5; }
+    tr.incident-row:hover td { background: #fed7d7; }
+
+    .ticket-id { font-family: monospace; font-weight: 700; color: #667eea; white-space: nowrap; }
+    .ticket-title { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+    .ticket-source { font-size: .75rem; color: #718096; }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: .72rem; font-weight: 600; letter-spacing: .3px; white-space: nowrap; }
+    .badge-TICKETING  { background: #ebf4ff; color: #3182ce; }
+    .badge-INCIDENT   { background: #fff5f5; color: #c53030; }
+    .badge-OPEN       { background: #f0fff4; color: #276749; }
+    .badge-APPROVED   { background: #ebf4ff; color: #2b6cb0; }
+    .badge-PENDING    { background: #fffaf0; color: #c05621; }
+    .badge-REJECT     { background: #fff5f5; color: #c53030; }
+    .badge-DONE       { background: #e2e8f0; color: #4a5568; }
+    .badge-RESOLVED   { background: #f0fff4; color: #276749; }
+    .badge-default    { background: #e2e8f0; color: #4a5568; }
+
+    .assignee { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; color: #4a5568; }
+    .date-cell { white-space: nowrap; font-size: .78rem; color: #718096; }
+
+    .btn-detail { padding: 4px 12px; background: #667eea; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: .78rem; text-decoration: none; white-space: nowrap; }
+    .btn-detail:hover { background: #5a67d8; }
+
+    .empty-state { text-align: center; padding: 48px; color: #a0aec0; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .stats { padding: 16px; }
+      .filters, .table-wrap { padding-left: 16px; padding-right: 16px; }
+      .header { padding: 16px; }
+      .header-left h1 { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>🎫 Dashboard Tiket Helpdesk</h1>
+    <p><%= orgName %> — <%= orgDepartment %></p>
+  </div>
+  <div class="header-right">
+    <div>v5.0 Prisma</div>
+    <div id="clock"></div>
+  </div>
+</div>
+
+<%
+  // Hitung statistik
+  const total       = tickets.length;
+  const openCount   = tickets.filter(t => t.status_pengusulan === 'OPEN').length;
+  const pendingCount= tickets.filter(t => t.status_pengusulan === 'PENDING').length;
+  const resolvedCount=tickets.filter(t => ['DONE','RESOLVED'].includes(t.status_pengusulan)).length;
+  const incidentCount=tickets.filter(t => t.type === 'INCIDENT').length;
+%>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">Total Tiket</div>
+    <div class="value"><%= total %></div>
+  </div>
+  <div class="stat-card open">
+    <div class="label">Open</div>
+    <div class="value"><%= openCount %></div>
+  </div>
+  <div class="stat-card pending">
+    <div class="label">Pending</div>
+    <div class="value"><%= pendingCount %></div>
+  </div>
+  <div class="stat-card resolved">
+    <div class="label">Selesai</div>
+    <div class="value"><%= resolvedCount %></div>
+  </div>
+  <div class="stat-card incident">
+    <div class="label">Insiden</div>
+    <div class="value"><%= incidentCount %></div>
+  </div>
+</div>
+
+<div class="filters">
+  <label>Filter Status:</label>
+  <select id="filterStatus">
+    <option value="">Semua</option>
+    <option value="OPEN">Open</option>
+    <option value="PENDING">Pending</option>
+    <option value="APPROVED">Approved</option>
+    <option value="DONE">Done</option>
+    <option value="RESOLVED">Resolved</option>
+    <option value="REJECT">Reject</option>
+  </select>
+  <label>Tipe:</label>
+  <select id="filterType">
+    <option value="">Semua</option>
+    <option value="TICKETING">Support</option>
+    <option value="INCIDENT">Insiden</option>
+  </select>
+  <label>Cari:</label>
+  <input type="text" id="searchInput" placeholder="ID, judul, pengguna..." style="width:200px">
+  <button class="btn-refresh" onclick="location.reload()">↻ Refresh</button>
+</div>
+
+<div class="table-wrap">
+  <table id="ticketTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>ID</th>
+        <th>Judul</th>
+        <th>Tipe</th>
+        <th>Status</th>
+        <th>Pemohon</th>
+        <th>Assignee</th>
+        <th>Dibuat</th>
+        <th>Diperbarui</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (tickets.length === 0) { %>
+      <tr>
+        <td colspan="10" class="empty-state">
+          <div class="icon">📭</div>
+          <div>Belum ada tiket</div>
+        </td>
+      </tr>
+      <% } else { %>
+      <% tickets.forEach(function(t, i) {
+        const fields     = (t.form_fields || t.formFields || {});
+        const title      = (t.type === 'INCIDENT')
+                           ? (fields['Incident Information'] || 'Incident Report')
+                           : (fields['Issue'] || fields['Judul'] || fields['Title'] || 'Tiket Support');
+        const requester  = fields['Name'] || fields['Nama'] || fields['Email'] || '—';
+        const assignee   = (t.assignee && Array.isArray(t.assignee) && t.assignee.length > 0)
+                           ? t.assignee.map(a => a.username || a.displayName || a).join(', ')
+                           : '—';
+        const status     = t.status_pengusulan || t.statusPengusulan || 'OPEN';
+        const badgeType  = 'badge-' + (t.type || 'default');
+        const badgeStat  = 'badge-' + status;
+        const isIncident = t.type === 'INCIDENT';
+
+        function fmtDate(d) {
+          if (!d) return '—';
+          return new Date(d).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
+        }
+      %>
+      <tr class="<%= isIncident ? 'incident-row' : '' %>"
+          data-status="<%= status %>"
+          data-type="<%= t.type %>"
+          data-search="<%= t.id %> <%= title.toLowerCase() %> <%= requester.toLowerCase() %>">
+        <td style="color:#a0aec0;font-size:.75rem"><%= i+1 %></td>
+        <td><span class="ticket-id">#<%= t.id %></span></td>
+        <td><span class="ticket-title" title="<%= title %>"><%= title %></span>
+            <% if (t.form_id === 'chatbot_auto_create') { %><br><span class="ticket-source">🤖 chatbot</span><% } %>
+        </td>
+        <td><span class="badge <%= badgeType %>"><%= t.type === 'INCIDENT' ? '🚨 Insiden' : '🎫 Support' %></span></td>
+        <td><span class="badge <%= badgeStat %>"><%= status %></span></td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem" title="<%= requester %>"><%= requester %></td>
+        <td><span class="assignee" title="<%= assignee %>"><%= assignee %></span></td>
+        <td class="date-cell"><%= fmtDate(t.created_at || t.createdAt) %></td>
+        <td class="date-cell"><%= fmtDate(t.updated_at || t.updatedAt) %></td>
+        <td><a class="btn-detail" href="/tickets/<%= t.id %>">Detail</a></td>
+      </tr>
+      <% }) %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // Clock
+  function updateClock() {
+    document.getElementById('clock').textContent = new Date().toLocaleString('id-ID');
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // Client-side filter
+  const statusSel  = document.getElementById('filterStatus');
+  const typeSel    = document.getElementById('filterType');
+  const searchInp  = document.getElementById('searchInput');
+
+  function applyFilter() {
+    const status = statusSel.value;
+    const type   = typeSel.value;
+    const q      = searchInp.value.toLowerCase().trim();
+    document.querySelectorAll('#ticketTable tbody tr').forEach(row => {
+      if (!row.dataset.status) return;
+      const matchSt = !status || row.dataset.status === status;
+      const matchTy = !type   || row.dataset.type   === type;
+      const matchQ  = !q      || (row.dataset.search || '').includes(q);
+      row.style.display = (matchSt && matchTy && matchQ) ? '' : 'none';
+    });
+  }
+
+  statusSel.addEventListener('change', applyFilter);
+  typeSel.addEventListener('change', applyFilter);
+  searchInp.addEventListener('input', applyFilter);
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .gitignore — Formbricks Discord Bot
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.production
+
+# Reports (generated at runtime — stored in Docker volume)
+public/reports/
+logs/
+
+# Prisma
+prisma/migrations/**/migration_lock.toml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ngrok binary (tidak perlu di-commit)
+ngrok-v3-stable-linux-amd64.tgz*
+ngrok-v3-stable-linux-amd64.tgz
+
+# Build artifacts
+dist/
+.nyc_output/
+coverage/
