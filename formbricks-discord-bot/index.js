@@ -38,12 +38,16 @@ const { getPublicUrl } = require("./src/utils/network");
 const DiscordService = require("./src/services/discord.service");
 
 // Routes
-const webhookRoute   = require("./src/routes/webhook.route");
-const ticketRoute    = require("./src/routes/ticket.route");
-const chatbotRoute   = require("./src/routes/chatbot.route");
-const knowledgeRoute = require("./src/routes/knowledge.route");
-const reportRoute    = require("./src/routes/report.route");
-const webRoute       = require("./src/routes/web.route");
+const webhookRoute     = require("./src/routes/webhook.route");
+const ticketRoute      = require("./src/routes/ticket.route");
+const chatbotRoute     = require("./src/routes/chatbot.route");
+const knowledgeRoute   = require("./src/routes/knowledge.route");
+const reportRoute      = require("./src/routes/report.route");
+const webRoute         = require("./src/routes/web.route");
+const peppermintRoute  = require("./src/routes/peppermint.route");  // ← NEW: Peppermint Portal API
+
+// CORS Middleware
+const { corsMiddleware } = require("./src/middleware/cors");         // ← NEW: CORS for Peppermint
 
 // Discord Handlers
 const ChatbotHandler = require("./src/handlers/chatbot.handler");
@@ -87,6 +91,7 @@ const app = express();
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(corsMiddleware);   // ← NEW: CORS — izinkan Peppermint portal akses API
 
 // ── Template Engine ───────────────────────────────────────────────────────────
 app.set("view engine", "ejs");
@@ -97,13 +102,14 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/reports", express.static(config.portal.reportDir || path.join(__dirname, "public", "reports")));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use("/webhook",       webhookRoute);    // POST /webhook/formbricks
-app.use("/api/ticket",    ticketRoute);     // GET|POST /api/ticket/*  (core API + portal CRUD)
-app.use("/api/tickets",   ticketRoute);     // GET /api/tickets & /api/tickets/stats (Peppermint Portal)
-app.use("/api/chatbot",   chatbotRoute);    // POST /api/chatbot/*
-app.use("/api/knowledge", knowledgeRoute);  // GET|POST /api/knowledge/*
-app.use("/api/report",    reportRoute);     // POST|GET /api/report/*
-app.use("/",              webRoute);        // GET / | /tickets/:id | /health
+app.use("/webhook",          webhookRoute);    // POST /webhook/formbricks
+app.use("/api/ticket",       ticketRoute);     // GET|POST /api/ticket/*  (core API + portal CRUD)
+app.use("/api/tickets",      ticketRoute);     // GET /api/tickets & /api/tickets/stats (Peppermint Portal)
+app.use("/api/chatbot",      chatbotRoute);    // POST /api/chatbot/*
+app.use("/api/knowledge",    knowledgeRoute);  // GET|POST /api/knowledge/*
+app.use("/api/report",       reportRoute);     // POST|GET /api/report/*
+app.use("/api/peppermint",   peppermintRoute); // ← NEW: Peppermint Portal Integration API
+app.use("/",                 webRoute);        // GET / | /tickets/:id | /health
 
 // ── Global Error Handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
@@ -173,6 +179,19 @@ function printStartupBanner(publicUrl) {
   📊  Dashboard  : ${publicUrl}/
   📄  Reports    : ${publicUrl}/reports/
   🩺  Health     : ${publicUrl}/health
+
+  ── Peppermint Portal API ───────────────────────────────────────
+  GET   /api/peppermint/tickets              ← List tiket (filter+pagination)
+  GET   /api/peppermint/tickets/stats        ← Dashboard stats
+  GET   /api/peppermint/tickets/:id          ← Detail tiket + activities
+  PUT   /api/peppermint/tickets/:id/status   ← Admin: update status
+  PUT   /api/peppermint/tickets/:id/assign   ← Admin: assign petugas
+  POST  /api/peppermint/tickets/:id/comment  ← Admin: tambah komentar
+  PUT   /api/peppermint/tickets/:id/note     ← Admin: catatan internal
+  GET   /api/peppermint/knowledge            ← List runbook KB
+  POST  /api/peppermint/knowledge            ← Admin: tambah runbook
+  PUT   /api/peppermint/knowledge/:id        ← Admin: update runbook
+  DELETE /api/peppermint/knowledge/:id       ← Admin: hapus runbook
 
   ── Webhook ────────────────────────────────────────────────
   POST  /webhook/formbricks              ← Formbricks submission
