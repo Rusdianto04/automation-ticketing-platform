@@ -1,33 +1,33 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# ngrok.yml
-# Konfigurasi Ngrok Tunnel — Formbricks Webhook Integration
+# ngrok.yml — Konfigurasi Ngrok Tunnel
 #
-# FUNGSI:
-#   Expose port 3000 (Express server) ke internet publik agar Formbricks
-#   dapat mengirim webhook submission ke server ini, meskipun server
-#   tidak memiliki IP publik (lokal / Docker).
+# CARA KERJA:
+#   Container sis-ngrok membaca file ini via volume mount: ./ngrok.yml:/etc/ngrok.yml
+#   Authtoken disimpan langsung di sini (bukan via env var) — identik dengan
+#   versi original yang berhasil (container: formbricks-ngrok).
 #
-# CARA PENGGUNAAN:
-#   1. Ganti `authtoken` dengan token Ngrok Anda dari https://dashboard.ngrok.com
-#   2. Set di Formbricks: Webhook URL → https://<ngrok-subdomain>.ngrok-free.app/webhook/formbricks
-#   3. Jalankan via Docker: service ngrok di docker-compose.yml sudah terkonfigurasi
+# SETELAH NGROK UP, ambil URL publik:
+#   Cara 1: docker logs sis-ngrok 2>&1 | grep -i "url\|started\|ngrok"
+#   Cara 2: Buka browser → http://localhost:4040 (ngrok inspector UI)
+#   Cara 3: ./start.sh ngrok-url
 #
-# REGION:
-#   ap = Asia Pacific (Singapore) — latency lebih rendah untuk Indonesia
+# SET URL DI FORMBRICKS:
+#   Formbricks Dashboard → Settings → Integrations → Webhooks → Add Webhook
+#   URL: https://xxxx.ngrok-free.app/webhook/formbricks
 #
-# CATATAN:
-#   Ngrok HANYA diperlukan untuk Formbricks webhook dari internet.
-#   N8N, peppermint, dan internal bot sudah berjalan di jaringan Docker (tidak perlu ngrok).
-#   Laporan HTML diakses via IP LAN perusahaan (PORTAL_URL di .env) — tidak perlu ngrok.
-# ─────────────────────────────────────────────────────────────────────────────
+# PENTING tentang addr:
+#   Gunakan SERVICE NAME Docker Compose (bukan container_name).
+#   service name = "backend"       <- key di services: di docker-compose.yml
+#   container_name = "sis-backend"  <- hanya label, bukan DNS Docker internal
+#   Docker DNS resolve via service name -> "backend:3000" BUKAN "sis-backend:3000"
 
-version: "2"
-authtoken: 36aWTUi38SPc4aET6UErjupLUQX_35gMk2gozagCKNPVmceXx
+version: "3"
+agent:
+  authtoken: "36aWTUi38SPc4aET6UErjupLUQX_35gMk2gozagCKNPVmceXx"
 
 tunnels:
   bot:
+    addr: backend:3000
     proto: http
-    addr: formbricks-discord-bot:3000
-    inspect: true                   # Bisa dimonitor di http://localhost:4040
-
-region: ap                          # Asia Pacific — latency rendah dari Indonesia
+    inspect: true
+    # Opsional: jika punya domain tetap (ngrok paid plan), uncomment:
+    # domain: your-domain.ngrok-free.app

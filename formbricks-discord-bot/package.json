@@ -1,38 +1,26 @@
 {
-  "name": "formbricks-discord-bot",
-  "version": "5.0.0",
-  "description": "IT Ticketing System — Discord Bot + Formbricks + N8N + Prisma ORM",
-  "main": "index.js",
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "name": "support-incident-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Support & Incident Management System — Monorepo (Backend + Frontend)",
   "scripts": {
-    "start":           "node index.js",
-    "dev":             "NODE_ENV=development nodemon index.js",
-    "db:generate":     "prisma generate",
-    "db:migrate":      "prisma migrate deploy",
-    "db:migrate:dev":  "prisma migrate dev",
-    "db:studio":       "prisma studio",
-    "db:push":         "prisma db push",
-    "db:reset":        "prisma migrate reset",
-    "lint":            "eslint src/ index.js --ext .js"
-  },
-  "dependencies": {
-    "@prisma/client":  "^5.22.0",
-    "axios":           "^1.7.7",
-    "body-parser":     "^1.20.3",
-    "discord.js":      "^14.16.3",
-    "dotenv":          "^16.4.5",
-    "ejs":             "^3.1.10",
-    "express":         "^4.21.1",
-    "nodemailer":      "^6.9.16",
-    "pg":              "^8.13.1"
+    "dev":            "concurrently -n backend,frontend -c cyan,magenta \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
+    "dev:backend":    "cd backend  && npm run dev",
+    "dev:frontend":   "cd frontend && npm run dev",
+    "install:all":    "cd backend && npm install && cd ../frontend && npm install",
+    "build:frontend": "cd frontend && npm run build",
+    "generate":       "cd backend  && npm run generate",
+    "prisma:studio":  "cd backend  && npx prisma studio",
+    "docker:up":      "docker compose up -d --build",
+    "docker:down":    "docker compose down",
+    "docker:logs":    "docker compose logs -f",
+    "docker:restart": "docker compose restart"
   },
   "devDependencies": {
-    "nodemon":         "^3.1.7",
-    "prisma":          "^5.22.0"
+    "concurrently": "^8.2.2"
   },
-  "prisma": {
-    "schema": "prisma/schema.prisma"
+  "engines": {
+    "node": ">=18.0.0",
+    "npm":  ">=9.0.0"
   }
 }

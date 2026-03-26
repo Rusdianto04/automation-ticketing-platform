@@ -1,31 +1,33 @@
-version: '3.8'
-
-# ─────────────────────────────────────────────────────────────────────────────
-# docker-compose.yml — Formbricks Discord Bot (Production v5)
+# =============================================================================
+# docker-compose.yml — Support & Incident Management System (Monorepo v1.0)
 #
-# HOST_IP (IP server untuk link laporan) — 3 cara, pilih salah satu:
+# Services:
+#   postgres   — PostgreSQL 15                (port 5432, internal only)
+#   backend    — Discord Bot + Express API    (port 3000)
+#   frontend   — Next.js Portal User & Admin  (port 3001)
+#   n8n        — N8N Workflow Engine          (port 5678)
+#   ngrok      — Public tunnel (opsional)     (port 4040)
 #
-#   CARA 1 — Biarkan kosong di .env → auto-detect otomatis (DIREKOMENDASIKAN)
-#     HOST_IP=
-#     Bot akan baca IP server langsung dari /proc/net/fib_trie saat restart.
-#     Cukup: docker compose restart formbricks-discord-bot
+# Penggunaan:
+#   ./start.sh              ← start semua (DIREKOMENDASIKAN — auto inject IP)
+#   docker compose up -d    ← manual (HOST_IP tidak ter-inject otomatis)
 #
-#   CARA 2 — Script start.sh (paling otomatis, IP selalu fresh):
-#     ./start.sh
-#     Script inject IP host ke container sebelum up, tidak perlu edit .env.
+# HOST_IP (untuk link laporan & LAN access):
+#   CARA 1: ./start.sh — auto-detect & inject otomatis
+#   CARA 2: Isi HOST_IP=192.168.x.x di .env
+#   CARA 3: export HOST_IP=$(hostname -I | awk '{print $1}') && docker compose up -d
 #
-#   CARA 3 — Isi manual di .env (untuk IP statis / tidak sering ganti):
-#     HOST_IP=192.168.1.100
-#
-#   Verifikasi IP yang dipakai: curl http://localhost:3000/api/network/info
-# ─────────────────────────────────────────────────────────────────────────────
+# PENTING — Volume names:
+#   Menggunakan external: true dengan nama lama agar data existing tidak hilang.
+#   Jika fresh install, buat dulu: docker volume create formbricks-discord-bot_postgres_data
+# =============================================================================
 
 services:
 
-  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
-    container_name: formbricks-postgres
+    container_name: sis-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB:       ${DB_NAME:-formbricks_tickets}
@@ -34,125 +36,158 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - bot-network
+      - sis-network
     healthcheck:
       test:     ["CMD-SHELL", "pg_isready -U ${DB_USER:-formbricks_user} -d ${DB_NAME:-formbricks_tickets}"]
       interval: 10s
       timeout:  5s
       retries:  5
+    logging:
+      driver: "json-file"
+      options: { max-size: "5m", max-file: "2" }
 
-  # ── Discord Bot + Express API ────────────────────────────────────────────────
-  formbricks-discord-bot:
-    build: .
-    container_name: formbricks-discord-bot
+  # ── Backend: Discord Bot + Express API ──────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: sis-backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
-      # App
-      - NODE_ENV=${NODE_ENV:-production}
-      - PORT=3000
-      - ORG_NAME=${ORG_NAME:-SEAMOLEC}
-      - ORG_DEPARTMENT=${ORG_DEPARTMENT:-IT Department}
-
-      # Database — Prisma
-      - DATABASE_URL=postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
-
-      # Database — Individual
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-formbricks_tickets}
-      - DB_USER=${DB_USER:-formbricks_user}
-      - DB_PASSWORD=${DB_PASSWORD:-formbricks_pass}
-      - DB_PASS=${DB_PASSWORD:-formbricks_pass}
-
-      # Discord
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
-
-      # N8N
-      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/discord-activity}
-      - N8N_CHATBOT_WEBHOOK=${N8N_CHATBOT_WEBHOOK:-http://n8n:5678/webhook/chatbot-qa}
-      - N8N_API_KEY=${N8N_API_KEY:-automation_ticketing01_incident02}
-
-      # SMTP
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - EMAIL_FROM=${EMAIL_FROM}
-
-      # AI
-      - GROQ_API_KEY=${GROQ_API_KEY}
-
-      # ── Portal / Reports ──────────────────────────────────────────────────
-      # PORTAL_URL: jika diisi, dipakai langsung. Jika kosong → auto-detect.
-      - PORTAL_URL=${PORTAL_URL:-}
-      - PDF_OUTPUT_DIR=/app/public/reports
-
-      # HOST_IP: IP LAN server fisik (bukan IP Docker).
-      # - Jika kosong di .env → network.js auto-detect via /proc/net/fib_trie
-      # - Jika diisi di .env  → dipakai langsung (override auto-detect)
-      # - start.sh akan inject nilai ini secara otomatis dari hostname -I
-      - HOST_IP=${HOST_IP:-}
-
+      NODE_ENV:            ${NODE_ENV:-production}
+      PORT:                3000
+      ORG_NAME:            ${ORG_NAME:-SEAMOLEC}
+      ORG_DEPARTMENT:      ${ORG_DEPARTMENT:-IT Department}
+      DATABASE_URL:        postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
+      DB_HOST:             postgres
+      DB_PORT:             5432
+      DB_NAME:             ${DB_NAME:-formbricks_tickets}
+      DB_USER:             ${DB_USER:-formbricks_user}
+      DB_PASSWORD:         ${DB_PASSWORD:-formbricks_pass}
+      DB_PASS:             ${DB_PASSWORD:-formbricks_pass}
+      DISCORD_BOT_TOKEN:   ${DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID:  ${DISCORD_CHANNEL_ID}
+      DISCORD_GUILD_ID:    ${DISCORD_GUILD_ID:-}
+      N8N_WEBHOOK_URL:     ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/discord-activity}
+      N8N_CHATBOT_WEBHOOK: ${N8N_CHATBOT_WEBHOOK:-http://n8n:5678/webhook/chatbot-qa}
+      N8N_API_KEY:         ${N8N_API_KEY:-automation_ticketing01_incident02}
+      SMTP_HOST:           ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT:           ${SMTP_PORT:-587}
+      SMTP_USER:           ${SMTP_USER:-}
+      SMTP_PASS:           ${SMTP_PASS:-}
+      EMAIL_FROM:          ${EMAIL_FROM:-}
+      GROQ_API_KEY:        ${GROQ_API_KEY:-}
+      # FORM_ID: wajib cocok dengan Survey ID di Formbricks dashboard
+      FORM_ID_TICKETING:   ${FORM_ID_TICKETING:-zcp7cbqqrtavbyd6wwkmk2vx}
+      FORM_ID_INCIDENT:    ${FORM_ID_INCIDENT:-cmiobkjfm2piqad012scz1yxf}
+      PORTAL_URL:          ${PORTAL_URL:-}
+      HOST_IP:             ${HOST_IP:-}
+      PDF_OUTPUT_DIR:      /app/public/reports
+      # BACKEND_SELF_URL: service name Docker Compose, bukan container_name
+      BACKEND_SELF_URL:    http://backend:3000
+      # FRONTEND_URL: untuk redirect dari backend ke Next.js portal
+      FRONTEND_URL:        http://frontend:3001
     env_file:
       - .env
     volumes:
       - reports_data:/app/public/reports
-      - ./logs:/app/logs
+      - ./logs/backend:/app/logs
     networks:
-      - bot-network
+      - sis-network
     depends_on:
       postgres:
         condition: service_healthy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     healthcheck:
-      test:         ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
+      test:         ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval:     30s
       timeout:      10s
       retries:      3
       start_period: 60s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
+
+  # ── Frontend: Next.js Portal (User + Admin) ─────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+    container_name: sis-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV:            ${NODE_ENV:-production}
+      PORT:                3001
+      DATABASE_URL:        postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
+      ORG_NAME:            ${ORG_NAME:-SEAMOLEC}
+      ORG_DEPARTMENT:      ${ORG_DEPARTMENT:-IT Department}
+      ADMIN_USERNAME:      ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD:      ${ADMIN_PASSWORD:-Admin@IT2026}
+      # ADMIN_PASSWORD_HASH: dikosongkan di .env agar tidak ada WARN Docker Compose
+      # (dollar sign $2a$12$... diinterpretasi Docker Compose sebagai variable expansion)
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      JWT_SECRET:          ${JWT_SECRET:-28d1ea9e34b789c1925646b54837f6444d66d39b98bfd62921b1e0b31b348416}
+      NEXTAUTH_URL:        ${NEXTAUTH_URL:-http://localhost:3001}
+    networks:
+      - sis-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/health"]
+      interval:     30s
+      timeout:      15s
+      retries:      5
+      start_period: 120s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
 
   # ── N8N Workflow Engine ──────────────────────────────────────────────────────
   n8n:
     image: n8nio/n8n:latest
-    container_name: formbricks-n8n
+    container_name: sis-n8n
     restart: unless-stopped
     ports:
       - "5678:5678"
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASS:-admin123}
-      - N8N_HOST=0.0.0.0
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=${N8N_WEBHOOK_BASE:-http://n8n:5678}
-      - GENERIC_TIMEZONE=Asia/Jakarta
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${DB_NAME:-formbricks_tickets}
-      - DB_POSTGRESDB_USER=${DB_USER:-formbricks_user}
-      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:-formbricks_pass}
-      - BOT_API_URL=http://formbricks-discord-bot:3000
-      - N8N_API_KEY=${N8N_API_KEY:-automation_ticketing01_incident02}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - N8N_DIAGNOSTICS_ENABLED=false
-      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
-      - N8N_TEMPLATES_ENABLED=false
-      - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_MAX_AGE=168
+      N8N_BASIC_AUTH_ACTIVE:             true
+      N8N_BASIC_AUTH_USER:               ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD:           ${N8N_PASS:-admin123}
+      N8N_HOST:                          0.0.0.0
+      N8N_PORT:                          5678
+      N8N_PROTOCOL:                      http
+      # WEBHOOK_URL: URL yang bisa diakses dari Formbricks (luar Docker)
+      # Gunakan IP LAN server atau ngrok URL
+      # start.sh akan auto-inject jika N8N_WEBHOOK_BASE diset
+      WEBHOOK_URL:                       ${N8N_WEBHOOK_BASE:-http://n8n:5678}
+      GENERIC_TIMEZONE:                  Asia/Jakarta
+      DB_TYPE:                           postgresdb
+      DB_POSTGRESDB_HOST:                postgres
+      DB_POSTGRESDB_PORT:                5432
+      DB_POSTGRESDB_DATABASE:            ${DB_NAME:-formbricks_tickets}
+      DB_POSTGRESDB_USER:                ${DB_USER:-formbricks_user}
+      DB_POSTGRESDB_PASSWORD:            ${DB_PASSWORD:-formbricks_pass}
+      # BOT_API_URL: N8N memanggil backend melalui service name Docker Compose
+      # "backend" = service name di services: section (bukan container_name)
+      BOT_API_URL:                       http://backend:3000
+      N8N_API_KEY:                       ${N8N_API_KEY:-automation_ticketing01_incident02}
+      GROQ_API_KEY:                      ${GROQ_API_KEY:-}
+      N8N_DIAGNOSTICS_ENABLED:           false
+      N8N_VERSION_NOTIFICATIONS_ENABLED: false
+      N8N_TEMPLATES_ENABLED:             false
+      EXECUTIONS_DATA_PRUNE:             true
+      EXECUTIONS_DATA_MAX_AGE:           168
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n-workflows:/home/node/.n8n/workflows
+      - ./backend/n8n-workflows:/home/node/.n8n/workflows
     networks:
-      - bot-network
+      - sis-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,11 +197,28 @@ services:
       timeout:      10s
       retries:      3
       start_period: 40s
+    logging:
+      driver: "json-file"
+      options: { max-size: "5m", max-file: "2" }
 
-  # ── Ngrok ─────────────────────────────────────────────────────────────────────
+  # ── Ngrok — Public Tunnel ke Formbricks ─────────────────────────────────────
+  #
+  # FIX: Dihapus "profiles: [ngrok]" agar ngrok SELALU ikut docker compose up -d
+  # tanpa perlu flag --profile ngrok.
+  #
+  # Authtoken dibaca dari ngrok.yml (bukan environment var) — identik dengan
+  # versi original yang berhasil (container_name: formbricks-ngrok).
+  #
+  # Setelah ngrok up, ambil URL publik:
+  #   docker logs sis-ngrok 2>&1 | grep -i "url\|started\|ngrok"
+  #   atau buka: http://localhost:4040
+  #
+  # Set URL di Formbricks:
+  #   Settings -> Integrations -> Webhooks -> Add Webhook
+  #   URL: https://xxxx.ngrok-free.app/webhook/formbricks
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: formbricks-ngrok
+    container_name: sis-ngrok
     restart: unless-stopped
     command:
       - "start"
@@ -178,15 +230,18 @@ services:
     ports:
       - "4040:4040"
     networks:
-      - bot-network
+      - sis-network
     depends_on:
-      - formbricks-discord-bot
+      - backend
     logging:
       driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
+      options: { max-size: "5m", max-file: "2" }
 
+# ── Volumes ────────────────────────────────────────────────────────────────────
+# external: true agar data dari instalasi sebelumnya tidak hilang
+# Jika fresh install: docker volume create formbricks-discord-bot_postgres_data
+#                     docker volume create formbricks-discord-bot_n8n_data
+#                     docker volume create formbricks-discord-bot_reports_data
 volumes:
   postgres_data:
     name: formbricks-discord-bot_postgres_data
@@ -198,7 +253,8 @@ volumes:
     name: formbricks-discord-bot_reports_data
     external: true
 
+# ── Networks ───────────────────────────────────────────────────────────────────
 networks:
-  bot-network:
+  sis-network:
     name: shared-ticketing-network
     driver: bridge

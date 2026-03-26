@@ -1,0 +1,217 @@
+// app/api/admin/export/support/route.ts
+// Generate & download Excel laporan Ticketing Support per bulan
+// GET /api/admin/export/support?month=3&year=2026
+
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import ExcelJS from "exceljs";
+
+export const dynamic = "force-dynamic";
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function getField(fields: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const val = fields[key];
+    if (val !== undefined && val !== null && val !== "") {
+      if (Array.isArray(val)) return val.join(", ");
+      return String(val);
+    }
+  }
+  return "—";
+}
+
+function formatAssignee(assignee: unknown): string {
+  if (!assignee) return "—";
+  let arr: unknown = assignee;
+  if (typeof arr === "string") {
+    try { arr = JSON.parse(arr); } catch { return arr as string; }
+  }
+  if (!Array.isArray(arr)) return String(assignee);
+  return (arr as unknown[])
+    .map((a) => {
+      if (typeof a === "string") return a;
+      if (a && typeof a === "object") {
+        const o = a as Record<string, string>;
+        return o.displayName || o.username || o.name || "";
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join(", ") || "—";
+}
+
+function formatEvidence(evidence: unknown): string {
+  if (!evidence) return "—";
+  let arr: unknown = evidence;
+  if (typeof arr === "string") {
+    try { arr = JSON.parse(arr); } catch { return arr as string; }
+  }
+  if (!Array.isArray(arr)) return String(evidence);
+  return (arr as unknown[])
+    .map((e) => {
+      if (typeof e === "string") return e;
+      if (e && typeof e === "object") {
+        const o = e as Record<string, string>;
+        return o.url || o.link || "";
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n") || "—";
+}
+
+// ── Handler ────────────────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  try {
+    const url   = new URL(req.url);
+    const month = parseInt(url.searchParams.get("month") || "0", 10);
+    const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+
+    const now          = new Date();
+    const targetMonth  = month > 0 ? month : now.getMonth() + 1;
+    const targetYear   = year  > 0 ? year  : now.getFullYear();
+
+    // Batas waktu: awal & akhir bulan dalam WIB (UTC+7)
+    const startUTC = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
+    const endUTC   = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
+
+    const MONTHS_ID = [
+      "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+    ];
+    const monthLabel = MONTHS_ID[targetMonth] || `Bulan${targetMonth}`;
+
+    // Query DB
+    const p = prisma as any;
+    const tickets = await p.ticket.findMany({
+      where: {
+        type: "TICKETING",
+        created_at: { gte: startUTC, lt: endUTC },
+      },
+      orderBy: { created_at: "asc" },
+    });
+
+    // ── Build Excel dengan ExcelJS ──────────────────────────────────────────
+    const workbook  = new ExcelJS.Workbook();
+    workbook.creator  = "SIS Portal";
+    workbook.created  = new Date();
+
+    const sheetName = `Support ${monthLabel} ${targetYear}`;
+    const sheet = workbook.addWorksheet(sheetName);
+
+    // Definisi kolom — key = nama field di row object, header = judul kolom
+    sheet.columns = [
+      { header: "Reporter Information",      key: "reporter",   width: 28 },
+      { header: "Divisi / Unit Kerja",       key: "divisi",     width: 22 },
+      { header: "No Telepon",               key: "telepon",    width: 18 },
+      { header: "Email",                    key: "email",      width: 28 },
+      { header: "ID Device",               key: "iddevice",   width: 18 },
+      { header: "Ruangan",                 key: "ruangan",    width: 16 },
+      { header: "Lantai",                  key: "lantai",     width: 10 },
+      { header: "Tanggal & Waktu Pemohon", key: "tanggal",    width: 24 },
+      { header: "Type of Support Requested",key: "typesupport",width: 28 },
+      { header: "Jumlah Barang",           key: "jumlah",     width: 14 },
+      { header: "Keluhan Kerusakan",       key: "keluhan",    width: 38 },
+      { header: "Assign Team",             key: "assignee",   width: 32 },
+      { header: "Tindak Lanjut",           key: "timeline",   width: 55 },
+      { header: "Attachment",              key: "attachment", width: 45 },
+      { header: "Status Pengusulan",       key: "status",     width: 22 },
+    ];
+
+    // Style header row
+    const headerRow = sheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF3730A3" }, // indigo-700
+      };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      cell.border = {
+        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+      };
+    });
+    headerRow.height = 32;
+
+    // Status label map
+    const STATUS_MAP: Record<string, string> = {
+      OPEN: "Open", PENDING: "Pending", DONE: "Done (Sudah Selesai)",
+      REJECT: "Reject", RESOLVED: "Resolved",
+    };
+
+    // Tambahkan data rows
+    tickets.forEach((t: any, idx: number) => {
+      let ff: Record<string, unknown> = {};
+      if (typeof t.form_fields === "string") {
+        try { ff = JSON.parse(t.form_fields); } catch { ff = {}; }
+      } else if (t.form_fields && typeof t.form_fields === "object") {
+        ff = t.form_fields as Record<string, unknown>;
+      }
+
+      const createdAtStr = new Date(t.created_at).toLocaleString("id-ID", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+        timeZone: "Asia/Jakarta",
+      });
+
+      const row = sheet.addRow({
+        reporter:    getField(ff, "Reporter Information", "Name", "Nama", "Reporter Name"),
+        divisi:      getField(ff, "Division", "Divisi", "Departemen", "Department", "Unit Kerja"),
+        telepon:     getField(ff, "No Telepon", "Phone", "Nomor Telepon", "Telepon"),
+        email:       getField(ff, "Email", "email"),
+        iddevice:    getField(ff, "ID Device", "Device ID", "No Device"),
+        ruangan:     getField(ff, "Ruangan", "Room", "Location", "Lokasi"),
+        lantai:      getField(ff, "Lantai", "Floor"),
+        tanggal:     getField(ff, "Tanggal & Waktu Pemohon", "Tanggal", "Date") || createdAtStr,
+        typesupport: getField(ff, "Type of Support Requested", "Type of Support", "Kategori", "Category"),
+        jumlah:      getField(ff, "Jumlah Barang", "Quantity"),
+        keluhan:     getField(ff, "Issue", "Keluhan", "Keluhan Kerusakan", "Masalah", "Problem"),
+        assignee:    formatAssignee(t.assignee),
+        timeline:    (t.timeline_tindak_lanjut || "—").trim(),
+        attachment:  formatEvidence(t.evidence_attachment),
+        status:      STATUS_MAP[t.status_pengusulan] || t.status_pengusulan,
+      });
+
+      // Zebra striping
+      const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
+      row.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+        cell.alignment = { vertical: "top", wrapText: true };
+        cell.font = { size: 10 };
+      });
+      row.height = 60;
+    });
+
+    // Auto filter pada header
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to:   { row: 1, column: sheet.columns.length },
+    };
+
+    // Freeze pane: header tetap saat scroll
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+    // Generate buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+  const fileName = `Laporan_Support_${monthLabel}_${targetYear}.xlsx`;
+
+  // FIX: convert ke Uint8Array agar compatible dengan NextResponse
+  const uint8Array = new Uint8Array(buffer);
+
+  return new NextResponse(uint8Array, {
+    status: 200,
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+  } catch (err: any) {
+    console.error("[EXPORT SUPPORT]", err.message);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
