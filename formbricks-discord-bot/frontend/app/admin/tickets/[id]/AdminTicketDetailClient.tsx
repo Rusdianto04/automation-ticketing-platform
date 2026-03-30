@@ -39,14 +39,21 @@ interface TicketDetail {
   activities: Activity[];
 }
 
-const STATUS_OPTIONS_SUPPORT  = ["OPEN", "PENDING", "DONE", "REJECT"]           as const;
+const STATUS_OPTIONS_SUPPORT  = ["OPEN", "PENDING", "DONE", "REJECT"] as const;
 const STATUS_OPTIONS_INCIDENT = ["OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"] as const;
 
-const STATUS_LABELS: Record<string, string> = {
+// STATUS_LABELS_SUPPORT: tombol OPEN dilabel "In Progress" karena di konteks Support,
+// memilih tombol ini berarti mengerjakan ticket (equivalent !status approve di Discord).
+const STATUS_LABELS_SUPPORT: Record<string, string> = {
+  OPEN:    "🔄 In Progress",
+  PENDING: "⏳ Pending",
+  DONE:    "✔️ Done",
+  REJECT:  "❌ Reject",
+};
+
+// STATUS_LABELS_INCIDENT: semua label sesuai nama asli status, tidak ada perubahan.
+const STATUS_LABELS_INCIDENT: Record<string, string> = {
   OPEN:        "✅ Open",
-  PENDING:     "⏳ Pending",
-  DONE:        "✔️ Done",
-  REJECT:      "❌ Reject",
   INVESTIGASI: "🔍 Investigasi",
   MITIGASI:    "🛡️ Mitigasi",
   RESOLVED:    "✅ Resolved",
@@ -55,18 +62,58 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   OPEN:        "bg-emerald-50 text-emerald-700 border-emerald-200",
   PENDING:     "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED:    "bg-blue-50 text-blue-700 border-blue-200",
+  IN_PROGRESS: "bg-blue-50 text-blue-700 border-blue-200",
   DONE:        "bg-slate-100 text-slate-600 border-slate-200",
   REJECT:      "bg-red-50 text-red-700 border-red-200",
+  REJECTED:    "bg-red-50 text-red-700 border-red-200",
   INVESTIGASI: "bg-orange-50 text-orange-700 border-orange-200",
   MITIGASI:    "bg-purple-50 text-purple-700 border-purple-200",
   RESOLVED:    "bg-teal-50 text-teal-700 border-teal-200",
 };
 
+// Label yang ditampilkan di badge header untuk setiap status DB
+const STATUS_BADGE_LABELS: Record<string, string> = {
+  OPEN:        "In Progress",  // Support: OPEN di DB = In Progress
+  PENDING:     "Pending",
+  APPROVED:    "In Progress",  // raw dari Discord !status approve
+  IN_PROGRESS: "In Progress",  // hasil mapping dari lib/tickets.ts
+  DONE:        "Done",
+  REJECT:      "Reject",
+  REJECTED:    "Reject",
+  INVESTIGASI: "Investigasi",
+  MITIGASI:    "Mitigasi",
+  RESOLVED:    "Resolved",
+};
+/**
+ * Normalisasi status dari DB ke nilai tombol yang tersedia di STATUS_OPTIONS.
+ * Diperlukan agar tombol yang aktif bisa ter-highlight dengan benar.
+ *
+ * Mapping:
+ *   APPROVED  → "OPEN"   (Support: tombol "In Progress" = key OPEN)
+ *   REJECTED  → "REJECT" (normalisasi legacy)
+ *   lainnya   → tidak berubah
+ */
+function normalizeStatusForUI(rawStatus: string, isIncident: boolean): string {
+  if (!isIncident) {
+    // APPROVED   = dari Discord !status approve
+    // IN_PROGRESS = dari mapping lib/tickets.ts (APPROVED → IN_PROGRESS)
+    // Keduanya dipetakan ke tombol "OPEN" (berlabel "In Progress") di portal admin
+    if (rawStatus === "APPROVED" || rawStatus === "IN_PROGRESS") return "OPEN";
+    if (rawStatus === "REJECTED" || rawStatus === "REJECT")      return "REJECT";
+  }
+  return rawStatus;
+}
+
 export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDetail }) {
   const isIncident    = ticket.type === "INCIDENT";
   const statusOptions = isIncident ? STATUS_OPTIONS_INCIDENT : STATUS_OPTIONS_SUPPORT;
 
-  const [status,        setStatus]        = useState(ticket.status);
+  // Normalisasi status awal agar tombol yang aktif bisa ter-highlight
+  const [status, setStatus] = useState(() =>
+    normalizeStatusForUI(ticket.status, isIncident)
+  );
+
   const [assigneeInput, setAssigneeInput] = useState(ticket.assignee.join(", "));
 
   const [editingTicket, setEditingTicket] = useState(false);
@@ -92,14 +139,28 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
 
   const handleUpdateStatus = () => {
     startTransition(async () => {
+      // FIX: Khusus Ticketing Support, tombol "OPEN" = "In Progress" secara tampilan.
+      // Di DB dan Discord disimpan sebagai "APPROVED" (konsisten dengan !status approve).
+      // Untuk Incident, tombol "OPEN" tetap dikirim sebagai "OPEN" — tidak ada mapping.
+      const statusToSave = (!isIncident && status === "OPEN") ? "APPROVED" : status;
       const result = await adminUpdateStatusAction(
         ticket.id,
-        status as "OPEN" | "PENDING" | "DONE" | "REJECT"
+        statusToSave as "OPEN" | "PENDING" | "APPROVED" | "DONE" | "REJECT"
       );
       if (result?.error) showMsg("error", result.error);
       else showMsg("success", "Status berhasil diperbarui dan disinkronkan ke Discord.");
     });
   };
+
+  // Label untuk tombol status — berbeda antara Support dan Incident
+  const statusLabels = isIncident ? STATUS_LABELS_INCIDENT : STATUS_LABELS_SUPPORT;
+
+  // Label dan warna untuk badge di header — berdasarkan status raw dari DB
+  const rawStatus       = ticket.status;
+  const badgeLabel      = isIncident
+    ? (STATUS_LABELS_INCIDENT[rawStatus] || rawStatus).replace(/^[^\w]*/, "").trim()
+    : (STATUS_BADGE_LABELS[rawStatus] || rawStatus);
+  const badgeColorClass = STATUS_COLORS[rawStatus] || "bg-slate-100 text-slate-600 border-slate-200";
 
   const handleReassign = () => {
     const assignees: string[] = assigneeInput
@@ -137,8 +198,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  const reportUrl     = ticket.report_url || "";
-  const isValidReport = reportUrl.startsWith("http");
+  const reportUrl = ticket.report_url || "";
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -168,10 +228,9 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
             }`}>
               {isIncident ? "🚨 Incident" : "🎫 Support"}
             </span>
-            <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-              STATUS_COLORS[status] || "bg-slate-100 text-slate-600 border-slate-200"
-            }`}>
-              {status}
+            {/* Badge status: tampilkan label yang human-readable, bukan raw DB value */}
+            <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold border ${badgeColorClass}`}>
+              {badgeLabel}
             </span>
           </div>
         </div>
@@ -392,7 +451,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                             : "bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-400"
                         }`}
                       >
-                        {STATUS_LABELS[s] || s}
+                        {statusLabels[s] || s}
                       </button>
                     ))}
                   </div>
@@ -443,7 +502,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             </div>
 
-            {/* Laporan Incident — hanya untuk ticket INCIDENT, hanya di admin */}
+            {/* Laporan Incident — hanya untuk ticket INCIDENT */}
             {isIncident && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-rose-800 text-rose-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
@@ -451,8 +510,6 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                   Laporan Incident
                 </div>
                 <div className="p-4 space-y-3">
-                  {/* FIX: Gunakan API proxy /api/admin/report-view/[id] */}
-                  {/* Bukan reportUrl langsung dari DB yang bisa berisi IP lama */}
                   {reportUrl ? (
                     <a
                       href={`/api/admin/report-view/${ticket.id}`}

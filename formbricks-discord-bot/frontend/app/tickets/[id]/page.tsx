@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id: rawId } = await params;
   const ticket = await getTicketById(Number(rawId));
   if (!ticket) return { title: "Ticket Not Found" };
-  return { title: `#${ticket.id} — ${getTicketTitle(ticket)}` };
+  return { title: `#${ticket.id} (${getTicketTitle(ticket)})` };
 }
 
 export default async function TicketDetailPage({ params }: Props) {

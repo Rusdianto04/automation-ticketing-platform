@@ -1,323 +1,353 @@
 # 🛡️ Support & Incident Management System
 
-> **Monorepo** — Discord Bot + Express API (Backend) & Next.js Portal User + Admin (Frontend)
-> Production-ready system untuk manajemen **Ticketing Support** dan **Incident Report**
+> Discord Bot + Express API (Backend) · Next.js Portal User & Admin (Frontend)
+> Production-ready system untuk manajemen **Ticketing Support** dan **Incident Report** berbasis Discord + Web Portal + AI Automation.
+---
+## 📌 Overview & Deskripsi Sistem
+
+Sistem ini menghubungkan **Discord Bot**, **Web Portal** (User + Admin), **N8N Automation**, dan **AI (Groq)** dalam satu alur manajemen tiket yang terintegrasi penuh.
+
+### Alur Utama
+
+```
+User submit form Formbricks
+        │
+        ▼
+Backend (webhook) → Buat ticket di DB → Buat Discord thread → Pin info message
+        │
+        ▼
+Petugas IT update via Discord command (!status, !assign, !evidence)
+        │
+        ▼
+N8N Workflow → AI Groq generate summary + root cause → Simpan ke DB → Sync Discord
+        │
+        ▼
+User & Admin lihat hasil via Web Portal (real-time dari DB)
+```
+### Komponen Sistem
+
+| Komponen | Teknologi | Port | Fungsi |
+|----------|-----------|------|--------|
+| **Backend** | Node.js + Express + Discord.js | `3000` | Discord Bot, REST API, Webhook receiver |
+| **Frontend** | Next.js 14 + Tailwind CSS | `3001` | Portal User & Admin |
+| **Database** | PostgreSQL 15 | `5432` | Penyimpanan semua data tiket |
+| **N8N** | N8N Workflow Engine | `5678` | Otomasi AI classification, email, timeline |
+| **Ngrok** | Ngrok tunnel | `4040` | Public tunnel Formbricks → Backend (LAN) |
 
 ---
 
-## 📁 Struktur Monorepo
+## ⚙️ Prerequisites & Requirements
 
+### Wajib (Semua Environment)
+- **Docker** >= 24.x & **Docker Compose** >= 2.x
+- **Git**
+- **Discord Bot Token** — [Discord Developer Portal](https://discord.com/developers/applications)
+- **Groq API Key** — [console.groq.com](https://console.groq.com) (gratis)
+- **Ngrok Authtoken** — [dashboard.ngrok.com](https://dashboard.ngrok.com) (jika server di LAN)
+
+### Development Lokal (Opsional)
+- **Node.js** >= 18.0.0
+- **npm** >= 9.0.0
+- **PostgreSQL** running lokal
+
+### Discord Bot — Intents yang Harus Diaktifkan
+Di [Discord Developer Portal](https://discord.com/developers/applications) → Bot → Privileged Gateway Intents:
+- ✅ **Server Members Intent**
+- ✅ **Message Content Intent**
+
+---
+
+## 3. Struktur Direktori Project
 ```
-support-incident-system/              ← ROOT MONOREPO
+formbricks-discord-bot/               ← ROOT MONOREPO
 │
-├── 📄 package.json                   ← npm workspaces root
-├── 📄 docker-compose.yml             ← Orkestrasi semua service
-├── 📄 .env.example                   ← Template env untuk seluruh sistem
-├── 📄 .gitignore
-├── 📄 start.sh                       ← Script startup dengan auto-detect IP
-├── 📄 README.md
+├── 📄 .env                           ← Environment variables utama (WAJIB diisi)
+├── 📄 .env.example                   ← Template .env — copy ke .env sebelum mulai
+├── 📄 .gitignore                     ← Exclude node_modules, .env, logs
+├── 📄 docker-compose.yml             ← Orkestrasi 5 service (postgres, backend, frontend, n8n, ngrok)
+├── 📄 package.json                   ← npm workspaces root (scripts global)
+├── 📄 start.sh                       ← Script startup otomatis (auto-detect IP, inject env)
+├── 📄 ngrok.yml                      ← Konfigurasi Ngrok tunnel
+├── 📄 ngrok.sh                       ← Script helper ngrok
+├── 📄 README.md                      ← Dokumentasi ini
 │
 ├── 🔧 backend/                       ← Discord Bot + Express API (port 3000)
-│   ├── Dockerfile                    ← Multi-stage Alpine build
-│   ├── docker-entrypoint.sh          ← DB health check + Prisma migrate
-│   ├── package.json
-│   ├── index.js                      ← Entry point
-│   ├── .env.example                  ← Template env backend (dev lokal)
+│   ├── README.md                     ← Dokumentasi khusus backend
+│   ├── Dockerfile                    ← Multi-stage Alpine build (Node 18)
+│   ├── docker-entrypoint.sh          ← DB health check + Prisma migrate + seed
+│   ├── index.js                      ← Entry point (Discord client + Express server)
+│   ├── package.json                  ← Dependencies backend
+│   ├── .env.example                  ← Template env untuk dev lokal backend
 │   ├── .gitignore
 │   ├── .dockerignore
 │   ├── prisma/
-│   │   ├── schema.prisma             ← Database schema (source of truth)
-│   │   └── migrations/
-│   │       └── 0001_init/
-│   │           └── migration.sql     ← Initial migration (idempotent)
+│   │   ├── schema.prisma             ← Source of truth database schema
+│   │   └── migrations/0001_init/
+│   │       └── migration.sql         ← Initial migration (idempotent)
 │   ├── src/
-│   │   ├── config/index.js           ← Centralized config
-│   │   ├── database/                 ← Prisma client & views
+│   │   ├── config/
+│   │   │   └── index.js              ← Centralized config dari env vars
+│   │   ├── database/
+│   │   │   ├── client.js             ← Prisma client singleton
+│   │   │   └── views.js              ← DB view helpers
 │   │   ├── handlers/                 ← Discord event handlers
-│   │   ├── middleware/               ← Auth, rate limit
-│   │   ├── models/                   ← Data access layer (Prisma)
-│   │   ├── routes/                   ← Express routes
-│   │   │   ├── web.route.js          ← health + redirect ke frontend
-│   │   │   ├── webhook.route.js      ← Formbricks webhook
-│   │   │   ├── ticket.route.js       ← Ticket CRUD API
-│   │   │   ├── chatbot.route.js      ← AI chatbot API
-│   │   │   ├── knowledge.route.js    ← Knowledge base API
-│   │   │   └── report.route.js       ← Incident report API
+│   │   │   ├── chatbot.handler.js    ← AI chatbot (mention/DM → Groq → balas)
+│   │   │   ├── command.handler.js    ← !assign, !status, !evidence commands
+│   │   │   └── thread.handler.js     ← Monitor aktivitas thread → trigger N8N
+│   │   ├── middleware/
+│   │   │   ├── auth.js               ← API key validation (x-api-key header)
+│   │   │   └── rateLimit.js          ← Rate limiter per IP
+│   │   ├── models/                   ← Data access layer (Prisma wrapper)
+│   │   │   ├── ticket.model.js       ← CRUD ticket
+│   │   │   ├── activity.model.js     ← Log aktivitas per ticket
+│   │   │   └── submission.model.js   ← Raw Formbricks submission
+│   │   ├── routes/                   ← Express REST API routes
+│   │   │   ├── web.route.js          ← GET /health + redirect ke frontend
+│   │   │   ├── webhook.route.js      ← POST /webhook/formbricks (dari Formbricks)
+│   │   │   ├── ticket.route.js       ← /api/ticket/* (CRUD + sync-discord)
+│   │   │   ├── chatbot.route.js      ← /api/chatbot/* (context, stats)
+│   │   │   ├── knowledge.route.js    ← /api/knowledge/* (runbook)
+│   │   │   └── report.route.js       ← /api/report/* (generate HTML report)
 │   │   ├── services/
-│   │   │   ├── n8n.service.js        ← Trigger N8N workflows (NEW)
-│   │   │   ├── discord.service.js
-│   │   │   ├── email.service.js
-│   │   │   ├── report.service.js
-│   │   │   └── classifier.service.js
-│   │   └── utils/                    ← Helpers (network, ticket, date)
-│   ├── n8n-workflows/                ← N8N automation workflow JSON
-│   └── public/reports/               ← Generated HTML incident reports (volume)
+│   │   │   ├── discord.service.js    ← Build & update pinned message Discord
+│   │   │   ├── email.service.js      ← Nodemailer SMTP — kirim konfirmasi
+│   │   │   ├── n8n.service.js        ← Trigger N8N workflow via HTTP webhook
+│   │   │   ├── report.service.js     ← Generate HTML incident report
+│   │   │   └── classifier.service.js ← Klasifikasi ticket (Support/Incident)
+│   │   └── utils/
+│   │       ├── ticket.js             ← normalizeTicket, formatAssignee, dll.
+│   │       ├── discord.js            ← splitDiscordMessage, editMessageSafe
+│   │       ├── network.js            ← Auto-detect LAN IP server
+│   │       └── date.js               ← formatDate, formatDateTime
+│   ├── n8n-workflows/                ← Export JSON workflow N8N
+│   │   ├── Workflow 1_ Automation Ticket Intelligence...json
+│   │   └── Workflow 2_ Automation Chatbot Assistance...json
+│   └── public/reports/               ← Generated HTML incident reports (persistent volume)
 │
-├── 🌐 frontend/                      ← Next.js Portal (port 3001)
-│   ├── Dockerfile                    ← Multi-stage standalone build
-│   ├── package.json
-│   ├── next.config.js                ← output: standalone (Docker)
-│   ├── tailwind.config.js
-│   ├── tsconfig.json
+├── 🌐 frontend/                      ← Next.js Portal User + Admin (port 3001)
+│   ├── README.md                     ← Dokumentasi khusus frontend
+│   ├── Dockerfile                    ← Multi-stage standalone build (Node 20)
+│   ├── package.json                  ← Dependencies frontend
+│   ├── next.config.js                ← output: standalone + build options
+│   ├── tailwind.config.js            ← Tailwind CSS config
+│   ├── tsconfig.json                 ← TypeScript config
 │   ├── middleware.ts                 ← JWT route protection /admin/*
-│   ├── .env.example
+│   ├── .env.example                  ← Template env untuk dev lokal frontend
+│   ├── .gitignore
 │   ├── prisma/
-│   │   ├── schema.prisma             ← Copy dari backend (read-only portal)
-│   │   └── migrations/               ← Copy dari backend
-│   ├── app/
-│   │   ├── layout.tsx
+│   │   ├── schema.prisma             ← Copy dari backend (read-only via Prisma)
+│   │   └── migrations/               ← Copy dari backend migrations
+│   ├── app/                          ← Next.js App Router
+│   │   ├── layout.tsx                ← Root layout
 │   │   ├── page.tsx                  ← Redirect → /dashboard
 │   │   ├── globals.css
-│   │   ├── dashboard/                ← User portal (semua ticket)
+│   │   ├── api/                      ← Next.js API Routes (internal)
+│   │   │   ├── health/route.ts       ← GET /api/health (Docker healthcheck)
+│   │   │   └── admin/
+│   │   │       ├── stats/route.ts    ← Realtime stats + system health check
+│   │   │       ├── activities/route.ts ← Activities log dari DB
+│   │   │       ├── recent-tickets/route.ts ← 10 ticket terbaru
+│   │   │       ├── report-view/[id]/route.ts ← Proxy laporan HTML (dynamic IP)
+│   │   │       └── export/
+│   │   │           ├── support/route.ts   ← Download Excel Ticketing Support
+│   │   │           └── incident/route.ts  ← Download Excel Incident
+│   │   ├── dashboard/                ← Portal User — daftar semua ticket
 │   │   │   ├── page.tsx
 │   │   │   └── DashboardClient.tsx
-│   │   ├── tickets/[id]/             ← Detail ticket
-│   │   │   ├── page.tsx              ← Router: Support atau Incident
-│   │   │   ├── SharedComponents.tsx
+│   │   ├── tickets/[id]/             ← Detail ticket user
+│   │   │   ├── page.tsx              ← Router: Support vs Incident
+│   │   │   ├── SharedComponents.tsx  ← StatusBadge, TimelineSection, dll.
 │   │   │   ├── TicketDetailSupport.tsx
 │   │   │   └── TicketDetailIncident.tsx
 │   │   └── admin/                    ← Admin Control Panel (JWT protected)
 │   │       ├── layout.tsx
-│   │       ├── page.tsx              ← Admin dashboard
-│   │       ├── admin.css
-│   │       ├── actions.ts            ← Server Actions (login, update, assign)
-│   │       ├── AdminDashboardClient.tsx
-│   │       ├── login/                ← Login admin
-│   │       ├── tickets/              ← Ticket monitoring & management
-│   │       ├── automation/           ← Live automation log
-│   │       ├── system/               ← System control & health
-│   │       └── reports/              ← Analytics & KPI charts
+│   │       ├── page.tsx              ← Admin Dashboard
+│   │       ├── admin.css             ← Admin-specific styles
+│   │       ├── actions.ts            ← Server Actions: login, updateStatus, reassign
+│   │       ├── AdminDashboardClient.tsx ← Dashboard realtime
+│   │       ├── login/                ← Halaman login admin
+│   │       ├── tickets/              ← Ticket Monitoring & Kelola Ticket
+│   │       │   ├── AdminTicketsClient.tsx
+│   │       │   └── [id]/AdminTicketDetailClient.tsx
+│   │       ├── automation/           ← Live Automation Log
+│   │       │   └── AutomationLogClient.tsx
+│   │       └── reports/              ← Download Excel Reports
+│   │           └── ReportsClient.tsx
 │   ├── components/admin/
-│   │   └── AdminSidebar.tsx
+│   │   └── AdminSidebar.tsx          ← Sidebar navigasi admin
 │   ├── lib/
-│   │   ├── prisma.ts                 ← Prisma client singleton
+│   │   ├── prisma.ts                 ← Prisma client singleton (frontend)
 │   │   ├── auth.ts                   ← JWT sign/verify + bcrypt
-│   │   └── tickets.ts                ← DAL: getAllTickets, getTicketById, dll.
-│   └── types/index.ts                ← TypeScript interfaces
+│   │   └── tickets.ts                ← DAL: getAllTickets, getTicketById, formatDate
+│   └── types/index.ts                ← TypeScript interfaces global
 │
-└── 📋 logs/                          ← Runtime logs (auto-created)
+└── 📋 logs/                          ← Runtime logs (auto-created saat start)
     ├── backend/
     └── frontend/
 ```
-
 ---
 
 ## 🏗️ Arsitektur Sistem
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     PRODUCTION SYSTEM                                │
-│                                                                      │
-│  Discord          Formbricks          Browser (LAN)                  │
-│  Bot/Users        Webhook Form        User & Admin                   │
-└────┬─────────────────┬─────────────────────┬────────────────────────┘
-     │                 │                     │
-     ▼                 ▼                     ▼
-┌───────────────┐ ┌──────────┐   ┌──────────────────────┐
-│   BACKEND     │ │  N8N     │   │     FRONTEND          │
-│   :3000       │ │  :5678   │   │     :3001             │
-│               │ │          │   │                       │
-│ Discord Bot   │ │ Workflow  │   │ /dashboard            │
-│ Express API   │ │ AI Groq  │   │ /tickets/:id          │
-│ Webhook recv  │ │ Email    │   │ /admin (JWT)          │
-│ HTML Reports  │ │ N8N auto │   │                       │
-└───────┬───────┘ └────┬─────┘   └──────────┬────────────┘
-        │              │                    │
-        └──────────────┴────────────────────┘
-                       │
-                       ▼
-          ┌────────────────────────┐
-          │   PostgreSQL :5432     │
-          │   (internal network)   │
-          └────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        PRODUCTION SYSTEM                         │
+│                                                                  │
+│   Discord          Formbricks           Browser (LAN)            │
+│   Bot/Users        Webhook Form         User & Admin             │
+└──────┬──────────────────┬───────────────────────┬───────────────┘
+       │                  │                       │
+       ▼                  ▼                       ▼
+┌─────────────┐    ┌────────────┐    ┌────────────────────────┐
+│  BACKEND    │◄───│    N8N     │    │       FRONTEND          │
+│  :3000      │    │  :5678     │    │       :3001             │
+│             │    │            │    │                         │
+│ Discord Bot │    │ AI Groq    │    │ /dashboard              │
+│ Express API │    │ Workflow   │    │ /tickets/:id            │
+│ Webhook     │    │ Email SMTP │    │ /admin (JWT protected)  │
+│ HTML Report │    │ N8N auto   │    │                         │
+└──────┬──────┘    └─────┬──────┘    └────────────┬────────────┘
+       │                 │                        │
+       └─────────────────┴────────────────────────┘
+                         │
+                         ▼
+             ┌───────────────────────┐
+             │   PostgreSQL :5432    │
+             │   (internal network)  │
+             └───────────────────────┘
+                         ▲
+              ┌──────────┘
+              │
+    ┌─────────────────┐
+    │  NGROK :4040    │
+    │  (LAN tunnel)   │
+    │  Formbricks →   │
+    │  Backend        │
+    └─────────────────┘
 ```
 
 ---
 
-## 🚀 Setup Production (Docker — Direkomendasikan)
+## 🚀 Instalasi & Setup Pertama Kali
 
-### Step 1 — Persiapan
-
+### Langkah 1 — Clone & Masuk ke Direktori
 ```bash
-cd support-incident-system/
-chmod +x start.sh
+git clone <url-repository> <File Project>
+cd <File Project>
 ```
 
-### Step 2 — Konfigurasi `.env`
+### Langkah 2 — Buat Docker Volumes (Hanya Pertama Kali)
+```bash
+docker volume create formbricks-discord-bot_postgres_data
+docker volume create formbricks-discord-bot_n8n_data
+docker volume create formbricks-discord-bot_reports_data
+```
 
+### Langkah 3 — Konfigurasi Environment
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-**Variabel wajib diisi:**
+**Variabel wajib diisi di `.env`:**
 
-| Variable | Keterangan |
-|----------|------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `DISCORD_BOT_TOKEN` | Token Discord Bot |
-| `DISCORD_CHANNEL_ID` | ID channel Discord |
-| `DISCORD_GUILD_ID` | ID server Discord |
-| `GROQ_API_KEY` | API key Groq untuk AI |
-| `ADMIN_PASSWORD_HASH` | Hash bcrypt password admin |
-| `JWT_SECRET` | Secret key JWT (panjang & unik!) |
-| `SMTP_USER` / `SMTP_PASS` | Kredensial email |
+| Variabel | Keterangan | Contoh |
+|----------|------------|--------|
+| `DISCORD_BOT_TOKEN` | Token bot dari Discord Developer Portal | `MTQ...Zs` |
+| `DISCORD_CHANNEL_ID` | ID channel Discord tempat thread tiket dibuat | `1447404...` |
+| `DISCORD_GUILD_ID` | ID server (guild) Discord | `1447417...` |
+| `GROQ_API_KEY` | API key Groq untuk AI classification | `gsk_...` |
+| `ADMIN_PASSWORD` | Password login portal admin | `Admin@IT2026` |
+| `JWT_SECRET` | Secret key JWT (ubah di production!) | string acak panjang |
+| `SMTP_USER` | Email Gmail untuk notifikasi | `it@gmail.com` |
+| `SMTP_PASS` | Gmail App Password (bukan password akun) | 16 karakter |
+| `NGROK_AUTHTOKEN` | Token ngrok untuk tunnel publik | `2abc...` |
+| `N8N_WEBHOOK_BASE` | URL N8N yang bisa diakses dari luar Docker | `http://192.168.x.x:5678` |
 
-### Step 3 — Generate admin password hash
+> **Tips:** Untuk `ADMIN_PASSWORD` mudah — cukup isi `ADMIN_PASSWORD=passwordAnda` dan kosongkan `ADMIN_PASSWORD_HASH=`. Sistem akan otomatis menangani enkripsi.
 
-```bash
-node -e "require('bcryptjs').hash('PasswordAnda', 12).then(console.log)"
-# Paste hasilnya ke ADMIN_PASSWORD_HASH di .env
+### Langkah 4 — Konfigurasi Ngrok
+Edit file `ngrok.yml` di root:
+
+```yaml
+authtoken: YOUR_NGROK_AUTHTOKEN_HERE   # ganti dengan token ngrok Anda
+version: "2"
+tunnels:
+  bot:
+    proto: http
+    addr: backend:3000
 ```
 
-### Step 4 — Create Docker volumes (pertama kali saja)
-
+### Langkah 5 — Jalankan Semua Service
 ```bash
-docker volume create sis_postgres_data
-docker volume create sis_n8n_data
-docker volume create sis_reports_data
-```
-
-### Step 5 — Start semua service
-
-```bash
-# Cara paling mudah (auto-detect IP):
+chmod +x start.sh
 ./start.sh
-
-# Atau manual:
-docker compose up -d --build
 ```
+> `start.sh` secara otomatis mendeteksi IP server dan meng-inject ke container.
 
-### Step 6 — Verifikasi
-
+### Langkah 6 — Verifikasi Semua Service Berjalan
 ```bash
-./start.sh status           # lihat status container
-docker compose logs backend  # log backend
-docker compose logs frontend # log frontend
+./start.sh status
 ```
 
+Output yang diharapkan: semua container status `Up (healthy)`.
 | Service | URL | Keterangan |
 |---------|-----|------------|
-| **User Portal** | `http://SERVER_IP:3001/dashboard` | Akses publik internal |
-| **Admin Portal** | `http://SERVER_IP:3001/admin` | Login required |
-| **Backend API** | `http://SERVER_IP:3000/health` | Health check |
-| **N8N** | `http://SERVER_IP:5678` | Workflow engine |
+| **User Portal** | `http://SERVER_IP:3001/dashboard` | Akses publik internal LAN |
+| **Admin Portal** | `http://SERVER_IP:3001/admin` | Login dengan kredensial `.env` |
+| **Backend API** | `http://SERVER_IP:3000/health` | Health check endpoint |
+| **N8N** | `http://SERVER_IP:5678` | Workflow engine dashboard |
+| **Ngrok Dashboard** | `http://SERVER_IP:4040` | Pantau tunnel publik |
 
----
+### Langkah 7 — Setup N8N Workflow
+1. Buka `http://SERVER_IP:5678`, login dengan `N8N_USER` / `N8N_PASS` dari `.env`
+2. Import workflow: **Settings → Import from File**
+3. Import kedua file dari `backend/n8n-workflows/`:
+   - `Workflow 1_ Automation Ticket Intelligence...json`
+   - `Workflow 2_ Automation Chatbot Assistance...json`
+4. Aktifkan kedua workflow (toggle ON)
 
-## 💻 Setup Development (Lokal)
-
-### Prerequisites
-- Node.js >= 18 & npm >= 9
-- PostgreSQL running locally
-- Discord Bot Token
-
-### Install & Run
-
-```bash
-# Install semua workspace (backend + frontend)
-npm install
-
-# Setup env
-cp .env.example .env   # edit sesuai lokal
-cd backend && cp .env.example .env && cd ..
-
-# Generate Prisma client
-npm run generate
-
-# Jalankan backend + frontend sekaligus
-npm run dev
-```
-
-> **Port dev:** Backend :3000, Frontend :3001 (Next.js)
-> Jika bentrok, ubah `PORT=3001` backend → `PORT=3002` di `.env` backend dev
-
----
-
-## 🔐 Admin Portal
-
-**URL:** `http://SERVER_IP:3001/admin` (atau klik tombol "Admin Panel" di dashboard)
-
-**Login:** Username dari `ADMIN_USERNAME` env, password dari `ADMIN_PASSWORD_HASH` env
-
-| Menu | Fungsi |
-|------|--------|
-| **Dashboard Monitoring** | Stats real-time, automation rate, status sistem |
-| **Ticket Monitoring** | Filter, search, lihat semua ticket |
-| **Kelola Ticket** | Ubah status, reassign petugas, view log |
-| **Automation Log** | Live log Bot/N8N/AI/DB (terminal style) |
-| **System Control** | Restart/test komponen sistem |
-| **Reports & Analytics** | Chart 7 hari, KPI, distribusi ticket |
-
----
-
-## 📋 User Portal — Detail Ticket
-
-### Ticketing Support (`/tickets/:id`)
-
-| Section | Sumber Data |
-|---------|-------------|
-| Data Formulir | `form_fields` JSONB dari DB |
-| **Ringkasan Ticket (AI Summary)** | **`summary_ticket` TEXT dari DB** ← diisi AI classifier |
-| Root Cause | `root_cause` TEXT dari DB |
-| Timeline Progress | `timeline_tindak_lanjut` TEXT dari DB |
-| Informasi Ticket | `id`, `status_pengusulan`, type |
-| Assignee / Petugas | `assignee` JSONB dari DB |
-
-### Incident Report (`/tickets/:id`)
-
-| Section | Sumber Data |
-|---------|-------------|
-| Data Formulir | Semua field `form_fields` JSONB |
-| **Ringkasan Incident (AI Summary)** | **`summary_ticket` TEXT dari DB** ← diisi AI classifier |
-| Root Cause Analysis | `root_cause` TEXT dari DB |
-| Action Taken / Timeline | `timeline_action_taken` TEXT dari DB |
-| Assignee / Petugas | `assignee` JSONB dari DB |
-| Laporan Incident | Link HTML report dari `discord.reportUrl` |
-
----
-
-## 🗄️ Database Schema (Tabel Penting)
-
-**Source of truth:** `backend/prisma/schema.prisma`
-
-**Field kunci di tabel `tickets`:**
-
-| Field | Tipe | Diisi oleh |
-|-------|------|-----------|
-| `summary_ticket` | TEXT | AI classifier (N8N + Groq) — otomatis |
-| `root_cause` | TEXT | Petugas IT — manual via Discord command |
-| `timeline_tindak_lanjut` | TEXT | N8N automation — otomatis |
-| `timeline_action_taken` | TEXT | N8N automation — otomatis |
-| `discord` | JSONB | Bot saat buat thread (termasuk `reportUrl`) |
+### Langkah 8 — Setup Formbricks Webhook
+1. Ambil URL publik ngrok: `docker logs sis-ngrok 2>&1 | grep -i url`
+2. Di Formbricks: **Settings → Integrations → Webhooks → Add Webhook**
+3. URL: `https://xxxx.ngrok-free.app/webhook/formbricks`
 
 ---
 
 ## 🛠️ Commands Berguna
 
 ```bash
-# Start semua service
-./start.sh
+# ── Manajemen Service ──────────────────────────────────────
+./start.sh              # Start semua service (DIREKOMENDASIKAN)
+./start.sh restart      # Restart semua tanpa rebuild
+./start.sh stop         # Stop semua service
+./start.sh status       # Lihat status semua container
 
-# Restart backend saja (tanpa rebuild)
-./start.sh restart
+# ── Logs ───────────────────────────────────────────────────
+./start.sh logs          # Semua log
+./start.sh logs backend  # Log backend saja
+./start.sh logs frontend # Log frontend saja
 
-# Lihat logs
-./start.sh logs
-./start.sh logs backend
-./start.sh logs frontend
+# ── Rebuild (setelah update kode) ──────────────────────────
+docker compose up -d --build backend   # Rebuild backend saja
+docker compose up -d --build frontend  # Rebuild frontend saja
+docker compose build --no-cache && docker compose up -d  # Full rebuild
 
-# Stop semua
-./start.sh stop
+# ── Database ───────────────────────────────────────────────
+npm run prisma:studio    # Buka Prisma Studio (GUI database)
 
-# Status container
-./start.sh status
+# ── npm Scripts ────────────────────────────────────────────
+npm run dev              # Dev mode (backend + frontend paralel)
+npm run dev:backend      # Dev mode backend saja
+npm run dev:frontend     # Dev mode frontend saja
+```
 
-# Prisma Studio (GUI database)
-npm run prisma:studio
+---
+## 🔄 Update & Redeploy
 
-# Start dengan Ngrok
-docker compose --profile ngrok up -d
+```bash
+git pull origin main
+./start.sh   # Rebuild otomatis jika ada perubahan
 ```
 
 ---
@@ -326,26 +356,12 @@ docker compose --profile ngrok up -d
 
 | Masalah | Solusi |
 |---------|--------|
-| Container tidak bisa mulai | `docker compose logs backend` untuk detail error |
-| `DATABASE_URL` error | Pastikan DB volume: `docker volume ls` |
-| Admin login gagal | Cek `ADMIN_PASSWORD_HASH` dan `JWT_SECRET` di `.env` |
-| `summary_ticket` kosong | Cek N8N workflow AI classification berjalan |
-| Report tidak bisa dibuka | Cek `HOST_IP` di `.env` dan volume `reports_data` |
-| Frontend build error | `cd frontend && npx prisma generate` dulu |
-| Bot Discord offline | Cek `DISCORD_BOT_TOKEN` valid dan intents Discord aktif |
-
----
-
-## 🔄 Update & Redeploy
-
-```bash
-# Pull update
-git pull origin main
-
-# Rebuild & restart semua
-./start.sh
-
-# Atau rebuild service tertentu saja
-docker compose up -d --build backend
-docker compose up -d --build frontend
-```
+| Container tidak start | `docker compose logs backend` untuk detail error |
+| Admin login gagal | Cek `ADMIN_PASSWORD` di `.env`, pastikan tidak ada spasi |
+| Discord bot offline | Cek `DISCORD_BOT_TOKEN` valid, dan intents di Developer Portal aktif |
+| Formbricks webhook tidak masuk | Cek ngrok berjalan: `docker logs sis-ngrok` |
+| N8N tidak trigger | Pastikan workflow aktif (toggle ON) dan `N8N_WEBHOOK_URL` benar |
+| AI summary tidak muncul | Cek `GROQ_API_KEY` valid di `.env` |
+| Report tidak bisa dibuka | Cek `HOST_IP` di `.env` dan volume `reports_data` ada |
+| Frontend build error | `cd frontend && npx prisma generate` |
+| Volume tidak ada | `docker volume create formbricks-discord-bot_postgres_data` |

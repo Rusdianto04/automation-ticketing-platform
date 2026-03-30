@@ -1,7 +1,4 @@
 // app/api/admin/export/incident/route.ts
-// Generate & download Excel laporan Incident per bulan
-// GET /api/admin/export/incident?month=3&year=2026
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
@@ -61,8 +58,15 @@ function formatEvidence(evidence: unknown): string {
     .join("\n") || "—";
 }
 
-// ── Handler ────────────────────────────────────────────────────────────────────
+// Helper border — semua sisi thin
+const borderAll: Partial<ExcelJS.Borders> = {
+  top:    { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  left:   { style: "thin", color: { argb: "FF000000" } },
+  right:  { style: "thin", color: { argb: "FF000000" } },
+};
 
+// ── Handler ────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const url   = new URL(req.url);
@@ -91,45 +95,44 @@ export async function GET(req: NextRequest) {
       orderBy: { created_at: "asc" },
     });
 
-    // ── Build Excel dengan ExcelJS ──────────────────────────────────────────
-    const workbook = new ExcelJS.Workbook();
+    // ── Build Excel ─────────────────────────────────────────────────────────
+    const workbook   = new ExcelJS.Workbook();
     workbook.creator = "SIS Portal";
     workbook.created = new Date();
 
     const sheetName = `Incident ${monthLabel} ${targetYear}`;
-    const sheet = workbook.addWorksheet(sheetName);
+    const sheet     = workbook.addWorksheet(sheetName);
 
     sheet.columns = [
-      { header: "Title",              key: "title",       width: 38 },
-      { header: "Date/Time",          key: "datetime",    width: 24 },
-      { header: "Priority",           key: "priority",    width: 14 },
-      { header: "Severity",           key: "severity",    width: 18 },
-      { header: "Suspect Area",       key: "area",        width: 22 },
-      { header: "Assign Team",        key: "assignee",    width: 32 },
-      { header: "Action Taken",       key: "action",      width: 60 },
-      { header: "Indicated Issue",    key: "issue",       width: 38 },
-      { header: "Handling",           key: "handling",    width: 55 },
-      { header: "Evidence Attachment",key: "evidence",    width: 45 },
-      { header: "Status",             key: "status",      width: 32 },
+      { header: "Title",               key: "title",    width: 38 },
+      { header: "Date/Time",           key: "datetime", width: 24 },
+      { header: "Priority",            key: "priority", width: 14 },
+      { header: "Severity",            key: "severity", width: 18 },
+      { header: "Suspect Area",        key: "area",     width: 22 },
+      { header: "Assign Team",         key: "assignee", width: 32 },
+      { header: "Action Taken",        key: "action",   width: 60 },
+      { header: "Indicated Issue",     key: "issue",    width: 38 },
+      { header: "Handling",            key: "handling", width: 55 },
+      { header: "Evidence Attachment", key: "evidence", width: 45 },
+      { header: "Status",              key: "status",   width: 32 },
     ];
 
-    // Style header row — rose/merah untuk incident
+    // ── Style header row ────────────────────────────────────────────────────
     const headerRow = sheet.getRow(1);
     headerRow.eachCell((cell) => {
       cell.fill = {
-        type: "pattern",
+        type:    "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF9F1239" }, // rose-800
+        fgColor: { argb: "FFFFF2CC" },
       };
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.font      = { bold: true, color: { argb: "FF000000" }, size: 11 };
       cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      cell.border = {
-        bottom: { style: "thin", color: { argb: "FFFECDD3" } },
-      };
+      // FIX: border semua sisi pada header
+      cell.border = borderAll;
     });
     headerRow.height = 32;
 
-    // Tambahkan data rows
+    // ── Data rows ───────────────────────────────────────────────────────────
     tickets.forEach((t: any, idx: number) => {
       let ff: Record<string, unknown> = {};
       if (typeof t.form_fields === "string") {
@@ -140,22 +143,24 @@ export async function GET(req: NextRequest) {
 
       const createdAt = new Date(t.created_at);
 
-      // Date/Time dari form_fields (input oleh pelapor) atau fallback ke created_at
       const dateIncident = getField(ff, "Date Incident", "Tanggal Incident", "Date");
       const timeIncident = getField(ff, "Time Incident", "Waktu Incident", "Time");
       const dateTimeStr  =
         dateIncident !== "—" && timeIncident !== "—"
-          ? `${dateIncident} / ${timeIncident}`
+          ? `${dateIncident}/${timeIncident}`
           : createdAt.toLocaleString("id-ID", {
               day: "2-digit", month: "2-digit", year: "numeric",
               hour: "2-digit", minute: "2-digit",
               timeZone: "Asia/Jakarta",
             });
 
-      // Status + durasi resolved
       const STATUS_MAP: Record<string, string> = {
-        OPEN: "Open", INVESTIGASI: "Investigasi", MITIGASI: "Mitigasi",
-        RESOLVED: "Resolved", DONE: "Resolved", REJECT: "Reject",
+        OPEN:        "Open",
+        INVESTIGASI: "Investigasi",
+        MITIGASI:    "Mitigasi",
+        RESOLVED:    "Resolved",
+        DONE:        "Resolved",
+        REJECT:      "Reject",
       };
       let statusStr = STATUS_MAP[t.status_pengusulan] || t.status_pengusulan;
 
@@ -175,7 +180,6 @@ export async function GET(req: NextRequest) {
         }${diffMins} Minutes)`;
       }
 
-      // Title: dari form_fields atau summary_ticket
       const title =
         getField(ff, "Incident Information", "Incident Title", "Title") !== "—"
           ? getField(ff, "Incident Information", "Incident Title", "Title")
@@ -183,24 +187,25 @@ export async function GET(req: NextRequest) {
 
       const row = sheet.addRow({
         title,
-        datetime:  dateTimeStr,
-        priority:  getField(ff, "Priority Incident", "Priority"),
-        severity:  getField(ff, "Severity Incident", "Severity"),
-        area:      getField(ff, "Suspect Area", "Area", "Lokasi"),
-        assignee:  formatAssignee(t.assignee),
-        action:    (t.timeline_action_taken || t.timeline_tindak_lanjut || "—").trim(),
-        issue:     getField(ff, "Indicated Issue", "Issue", "Masalah"),
-        handling:  t.summary_ticket || "—",
-        evidence:  formatEvidence(t.evidence_attachment),
-        status:    statusStr,
+        datetime: dateTimeStr,
+        priority: getField(ff, "Priority Incident", "Priority"),
+        severity: getField(ff, "Severity Incident", "Severity"),
+        area:     getField(ff, "Suspect Area", "Area", "Lokasi"),
+        assignee: formatAssignee(t.assignee),
+        action:   (t.timeline_action_taken || t.timeline_tindak_lanjut || "—").trim(),
+        issue:    getField(ff, "Indicated Issue", "Issue", "Masalah"),
+        handling: t.summary_ticket || "—",
+        evidence: formatEvidence(t.evidence_attachment),
+        status:   statusStr,
       });
 
-      // Zebra striping
-      const bgColor = idx % 2 === 0 ? "FFFFF1F2" : "FFFFFFFF"; // rose-50 / white
+      // Zebra striping + FIX: border semua sisi pada data rows
+      const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
       row.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
         cell.alignment = { vertical: "top", wrapText: true };
-        cell.font = { size: 10 };
+        cell.font      = { size: 10 };
+        cell.border    = borderAll;
       });
       row.height = 60;
     });
@@ -213,19 +218,16 @@ export async function GET(req: NextRequest) {
     sheet.views = [{ state: "frozen", ySplit: 1 }];
 
     // Generate buffer
-    const buffer = await workbook.xlsx.writeBuffer();
-    const fileName = `Laporan_Incident_${monthLabel}_${targetYear}.xlsx`;
-
-    // FIX: convert ke Uint8Array agar compatible dengan NextResponse
+    const buffer     = await workbook.xlsx.writeBuffer();
+    const fileName   = `Laporan_Incident_${monthLabel}_${targetYear}.xlsx`;
     const uint8Array = new Uint8Array(buffer);
 
     return new NextResponse(uint8Array, {
       status: 200,
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${fileName}"`,
-        "Cache-Control": "no-store",
+        "Cache-Control":       "no-store",
       },
     });
   } catch (err: any) {

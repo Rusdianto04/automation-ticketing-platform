@@ -44,17 +44,19 @@ export default async function AdminTicketDetailPage({
     summary_ticket: ticket.summary_ticket || "",
     root_cause:     ticket.root_cause    || "",
     discord:        (ticket.discord as { threadUrl?: string; threadId?: string }) || {},
-    // FIX: Sertakan report_url agar admin dapat akses laporan incident
     report_url:     ticket.report_url    || "",
     created_at:     formatDate(ticket.created_at, true),
     updated_at:     formatDate(ticket.updated_at, true),
     resolved_at:    ticket.resolved_at ? formatDate(ticket.resolved_at, true) : null,
-    activities: (ticket.activities || []).map((a) => ({
-      id:          a.id,
-      type:        a.type,
-      description: a.description || "",
-      created_at:  formatDate(a.created_at, true),
-    })),
+    // FIX: Batasi 10 aktivitas terbaru saja
+    activities: (ticket.activities || [])
+      .slice(0, 10)
+      .map((a) => ({
+        id:          a.id,
+        type:        a.type,
+        description: a.description || "",
+        created_at:  formatDate(a.created_at, true),
+      })),
   };
 
   return (

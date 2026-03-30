@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import AdminLoginClient from "./AdminLoginClient";
 
 export const metadata: Metadata = {
-  title: "Login — Admin Portal",
+  title: "Login Admin Portal",
 };
 
 export default function AdminLoginPage() {

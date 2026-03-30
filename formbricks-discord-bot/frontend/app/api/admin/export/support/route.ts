@@ -1,7 +1,4 @@
 // app/api/admin/export/support/route.ts
-// Generate & download Excel laporan Ticketing Support per bulan
-// GET /api/admin/export/support?month=3&year=2026
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
@@ -61,6 +58,14 @@ function formatEvidence(evidence: unknown): string {
     .join("\n") || "—";
 }
 
+// Helper border — semua sisi thin
+const borderAll: Partial<ExcelJS.Borders> = {
+  top:    { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  left:   { style: "thin", color: { argb: "FF000000" } },
+  right:  { style: "thin", color: { argb: "FF000000" } },
+};
+
 // ── Handler ────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -69,11 +74,10 @@ export async function GET(req: NextRequest) {
     const month = parseInt(url.searchParams.get("month") || "0", 10);
     const year  = parseInt(url.searchParams.get("year")  || "0", 10);
 
-    const now          = new Date();
-    const targetMonth  = month > 0 ? month : now.getMonth() + 1;
-    const targetYear   = year  > 0 ? year  : now.getFullYear();
+    const now         = new Date();
+    const targetMonth = month > 0 ? month : now.getMonth() + 1;
+    const targetYear  = year  > 0 ? year  : now.getFullYear();
 
-    // Batas waktu: awal & akhir bulan dalam WIB (UTC+7)
     const startUTC = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
     const endUTC   = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
 
@@ -83,7 +87,6 @@ export async function GET(req: NextRequest) {
     ];
     const monthLabel = MONTHS_ID[targetMonth] || `Bulan${targetMonth}`;
 
-    // Query DB
     const p = prisma as any;
     const tickets = await p.ticket.findMany({
       where: {
@@ -93,56 +96,57 @@ export async function GET(req: NextRequest) {
       orderBy: { created_at: "asc" },
     });
 
-    // ── Build Excel dengan ExcelJS ──────────────────────────────────────────
-    const workbook  = new ExcelJS.Workbook();
-    workbook.creator  = "SIS Portal";
-    workbook.created  = new Date();
+    // ── Build Excel ─────────────────────────────────────────────────────────
+    const workbook   = new ExcelJS.Workbook();
+    workbook.creator = "SIS Portal";
+    workbook.created = new Date();
 
     const sheetName = `Support ${monthLabel} ${targetYear}`;
-    const sheet = workbook.addWorksheet(sheetName);
+    const sheet     = workbook.addWorksheet(sheetName);
 
-    // Definisi kolom — key = nama field di row object, header = judul kolom
     sheet.columns = [
-      { header: "Reporter Information",      key: "reporter",   width: 28 },
-      { header: "Divisi / Unit Kerja",       key: "divisi",     width: 22 },
-      { header: "No Telepon",               key: "telepon",    width: 18 },
-      { header: "Email",                    key: "email",      width: 28 },
-      { header: "ID Device",               key: "iddevice",   width: 18 },
-      { header: "Ruangan",                 key: "ruangan",    width: 16 },
-      { header: "Lantai",                  key: "lantai",     width: 10 },
-      { header: "Tanggal & Waktu Pemohon", key: "tanggal",    width: 24 },
-      { header: "Type of Support Requested",key: "typesupport",width: 28 },
-      { header: "Jumlah Barang",           key: "jumlah",     width: 14 },
-      { header: "Keluhan Kerusakan",       key: "keluhan",    width: 38 },
-      { header: "Assign Team",             key: "assignee",   width: 32 },
-      { header: "Tindak Lanjut",           key: "timeline",   width: 55 },
-      { header: "Attachment",              key: "attachment", width: 45 },
-      { header: "Status Pengusulan",       key: "status",     width: 22 },
+      { header: "Reporter Information",       key: "reporter",    width: 28 },
+      { header: "Divisi / Unit Kerja",        key: "divisi",      width: 22 },
+      { header: "No Telepon",                 key: "telepon",     width: 18 },
+      { header: "Email",                      key: "email",       width: 28 },
+      { header: "ID Device",                  key: "iddevice",    width: 18 },
+      { header: "Ruangan",                    key: "ruangan",     width: 16 },
+      { header: "Lantai",                     key: "lantai",      width: 10 },
+      { header: "Tanggal & Waktu Pemohon",    key: "tanggal",     width: 24 },
+      { header: "Type of Support Requested",  key: "typesupport", width: 28 },
+      { header: "Jumlah Barang",              key: "jumlah",      width: 14 },
+      { header: "Keluhan Kerusakan",          key: "keluhan",     width: 38 },
+      { header: "Assign Team",                key: "assignee",    width: 32 },
+      { header: "Tindak Lanjut",              key: "timeline",    width: 55 },
+      { header: "Attachment",                 key: "attachment",  width: 45 },
+      { header: "Status Pengusulan",          key: "status",      width: 22 },
     ];
 
-    // Style header row
+    // ── Style header row ────────────────────────────────────────────────────
     const headerRow = sheet.getRow(1);
     headerRow.eachCell((cell) => {
       cell.fill = {
-        type: "pattern",
+        type:    "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF3730A3" }, // indigo-700
+        fgColor: { argb: "FFFFF2CC" },
       };
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.font      = { bold: true, color: { argb: "FF000000" }, size: 11 };
       cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      cell.border = {
-        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-      };
+      // FIX: border semua sisi pada header
+      cell.border = borderAll;
     });
     headerRow.height = 32;
 
-    // Status label map
+    // ── Status map ──────────────────────────────────────────────────────────
     const STATUS_MAP: Record<string, string> = {
-      OPEN: "Open", PENDING: "Pending", DONE: "Done (Sudah Selesai)",
-      REJECT: "Reject", RESOLVED: "Resolved",
+      OPEN:     "Open",
+      PENDING:  "Pending",
+      DONE:     "Done (Sudah Selesai)",
+      REJECT:   "Reject",
+      RESOLVED: "Resolved",
     };
 
-    // Tambahkan data rows
+    // ── Data rows ───────────────────────────────────────────────────────────
     tickets.forEach((t: any, idx: number) => {
       let ff: Record<string, unknown> = {};
       if (typeof t.form_fields === "string") {
@@ -175,41 +179,37 @@ export async function GET(req: NextRequest) {
         status:      STATUS_MAP[t.status_pengusulan] || t.status_pengusulan,
       });
 
-      // Zebra striping
+      // Zebra striping + FIX: border semua sisi pada data rows
       const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
       row.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
         cell.alignment = { vertical: "top", wrapText: true };
-        cell.font = { size: 10 };
+        cell.font      = { size: 10 };
+        cell.border    = borderAll;
       });
       row.height = 60;
     });
 
-    // Auto filter pada header
+    // Auto filter & freeze pane
     sheet.autoFilter = {
       from: { row: 1, column: 1 },
       to:   { row: 1, column: sheet.columns.length },
     };
-
-    // Freeze pane: header tetap saat scroll
     sheet.views = [{ state: "frozen", ySplit: 1 }];
 
     // Generate buffer
-  const buffer = await workbook.xlsx.writeBuffer();
-  const fileName = `Laporan_Support_${monthLabel}_${targetYear}.xlsx`;
+    const buffer     = await workbook.xlsx.writeBuffer();
+    const fileName   = `Laporan_Support_${monthLabel}_${targetYear}.xlsx`;
+    const uint8Array = new Uint8Array(buffer);
 
-  // FIX: convert ke Uint8Array agar compatible dengan NextResponse
-  const uint8Array = new Uint8Array(buffer);
-
-  return new NextResponse(uint8Array, {
-    status: 200,
-    headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+    return new NextResponse(uint8Array, {
+      status: 200,
+      headers: {
+        "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control":       "no-store",
+      },
+    });
   } catch (err: any) {
     console.error("[EXPORT SUPPORT]", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

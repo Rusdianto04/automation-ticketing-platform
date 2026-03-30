@@ -591,7 +591,7 @@ router.put("/:id/status", validateApiKey, async (req, res) => {
 
     const validStatuses = ticket.type === "INCIDENT"
       ? ["OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"]
-      : ["OPEN", "PENDING", "APPROVED", "REJECTED", "DONE"];
+      : ["OPEN", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "REJECT", "DONE"];
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: `Status "${status}" tidak valid untuk ${ticket.type}`, validStatuses });
@@ -685,6 +685,131 @@ router.put("/:id/assign", validateApiKey, async (req, res) => {
   } catch (err) {
     console.error("[TICKET] PUT /:id/assign error:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ticket/:id/sync-discord
+// Dipanggil dari portal admin setelah DB update selesai.
+// Berjalan sebagai background task (frontend tidak menunggu response ini).
+// PENTING: Route ini langsung return 202 Accepted,
+// lalu kerjakan Discord update secara async setelah response dikirim.
+router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id) || id < 1) return res.status(400).json({ error: "id tidak valid" });
+
+    const { action, status, assignees } = req.body;
+
+    // ── Return 202 SEGERA — frontend tidak perlu menunggu Discord selesai ──
+    // Discord API bisa memakan waktu 1-5 detik, kita tidak mau block di sini.
+    res.status(202).json({ accepted: true, ticketId: id, action });
+
+    // ── Semua pekerjaan berat di bawah ini berjalan SETELAH response dikirim ──
+    // Jika terjadi error di bawah, tidak akan mempengaruhi response ke frontend.
+
+    // Ambil ticket terbaru dari DB (fresh setelah update dari frontend)
+    let ticket;
+    try {
+      ticket = await TicketModel.findById(id);
+    } catch (dbErr) {
+      console.error(`❌ [SYNC-DISCORD] DB findById failed #${id}:`, dbErr.message);
+      return;
+    }
+    if (!ticket) {
+      console.warn(`⚠️ [SYNC-DISCORD] Ticket #${id} not found in DB`);
+      return;
+    }
+
+    const discord = ticket.discord || ticket.discordData || {};
+
+    // ── 1. Update Discord pinned message + thread title (paralel) ───────────
+    if (discord.threadId) {
+      try {
+        // Jalankan keduanya paralel — lebih cepat dari sequential
+        await Promise.all([
+          DiscordService.updateThreadTitle(ticket),
+          DiscordService.updateTicketMessage(ticket),
+        ]);
+        console.log(`✅ [SYNC-DISCORD] Ticket #${id} Discord updated (action: ${action})`);
+      } catch (discordErr) {
+        console.error(`❌ [SYNC-DISCORD] Discord update failed #${id}:`, discordErr.message);
+        // Tidak re-throw — lanjut ke step berikutnya
+      }
+    } else {
+      console.log(`⚠️ [SYNC-DISCORD] Ticket #${id} tidak punya Discord thread — skip Discord sync`);
+    }
+
+    // ── 2. Trigger N8N CLOSING jika status DONE/RESOLVED ────────────────────
+    // Sama seperti perilaku bot saat !status done/resolved
+    // Hanya trigger jika summary belum ada (jika sudah ada, cukup update Discord)
+    const currentStatus = ticket.statusPengusulan || ticket.status_pengusulan;
+    const isClosing     = currentStatus === "DONE" || currentStatus === "RESOLVED";
+
+    if (isClosing && discord.threadId) {
+      const hasSummary = !!(ticket.summaryTicket || ticket.summary_ticket);
+
+      if (hasSummary) {
+        // Summary sudah ada — pastikan Discord sinkron (repair jika perlu)
+        console.log(`ℹ️ [SYNC-DISCORD] Ticket #${id} CLOSING — summary exists, checking Discord sync`);
+        try {
+          const outOfSync = await DiscordService.isDiscordOutOfSync(ticket);
+          if (outOfSync) {
+            await DiscordService.repairPinnedMessage(ticket);
+            console.log(`🔧 [SYNC-DISCORD] Ticket #${id} Discord repaired (was out of sync)`);
+          }
+        } catch (repairErr) {
+          console.error(`❌ [SYNC-DISCORD] Repair failed #${id}:`, repairErr.message);
+        }
+      } else {
+        // Summary belum ada — trigger N8N untuk generate summary + rootCause
+        console.log(`🔔 [SYNC-DISCORD] Ticket #${id} CLOSING — triggering N8N for summary generation`);
+        try {
+          const N8NService = require("../services/n8n.service");
+          await N8NService.triggerWorkflow({
+            eventType:        "portal_status_closing",
+            threadId:         discord.threadId,
+            threadName:       discord.threadName || `#${id}`,
+            ticketId:         ticket.id,
+            ticketType:       ticket.type,
+            statusPengusulan: currentStatus,
+            mode:             "CLOSING",
+            messageId:        null,
+            messageContent:   `[Portal Admin] Status set to ${currentStatus}`,
+            authorId:         "portal_admin",
+            authorName:       "Portal Admin",
+            timestamp:        new Date().toISOString(),
+          });
+          console.log(`✅ [SYNC-DISCORD] N8N CLOSING triggered for Ticket #${id}`);
+        } catch (n8nErr) {
+          console.error(`❌ [SYNC-DISCORD] N8N trigger failed #${id}:`, n8nErr.message);
+        }
+      }
+    }
+
+    // ── 3. Log aktivitas ─────────────────────────────────────────────────────
+    try {
+      const actionLabel = {
+        status_update:      "Status diperbarui via Portal Admin",
+        reassign:           "Assignee diperbarui via Portal Admin",
+        form_fields_update: "Data formulir diperbarui via Portal Admin",
+        ticket_data_update: "Data ticket diperbarui via Portal Admin",
+      }[action] || `Update via Portal Admin (${action || "sync"})`;
+
+      await ActivityModel.create({
+        ticketId:    id,
+        type:        action || "admin_update",
+        description: actionLabel,
+      });
+    } catch (logErr) {
+      console.warn(`⚠️ [SYNC-DISCORD] Activity log failed #${id}:`, logErr.message);
+    }
+
+  } catch (err) {
+    // Hanya terkena jika error sebelum res.status(202) dikirim
+    if (!res.headersSent) {
+      console.error("[TICKET] POST /:id/sync-discord error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 

@@ -4,7 +4,7 @@ import { getAllTickets, getTicketStats, getTicketTitle, getRequesterName, format
 import DashboardClient from "./DashboardClient";
 
 export const metadata: Metadata = {
-  title: "Dashboard — Support & Incident Portal",
+  title: "Dashboard Support & Incident Portal",
 };
 
 // Force dynamic rendering — page ini query DB saat runtime, bukan build time

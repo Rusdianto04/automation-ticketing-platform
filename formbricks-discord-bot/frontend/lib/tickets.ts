@@ -161,13 +161,19 @@ function normalizeTicket(raw: any): Ticket {
     discordObj.reportFileUrl ||
     null;
 
-  // FIX: Jangan mapping status RESOLVED → DONE
-  // RESOLVED adalah status valid untuk Incident (berbeda dari DONE untuk Support)
-  // Hanya mapping status legacy lama yang tidak dipakai lagi
+  // FIX STATUS MAPPING:
+  // DB menyimpan status asli dari Discord command:
+  //   !status approve  → APPROVED  (In Progress)
+  //   !status reject   → REJECTED  (Reject)
+  // Portal Admin menyimpan:
+  //   IN_PROGRESS → harus di-save ke DB sebagai APPROVED
+  //   REJECT      → disimpan langsung
+  // Mapping di sini untuk tampilan frontend:
+  //   APPROVED  → tampilkan sebagai IN_PROGRESS (konsisten dengan Discord "In Progress")
+  //   REJECTED  → tampilkan sebagai REJECT
   let status = raw.status_pengusulan || "OPEN";
-  if (status === "APPROVED")              status = "DONE";      // legacy Support
-  if (status === "REJECTED")              status = "REJECT";    // legacy Support
-  // CATATAN: RESOLVED tidak diubah — biarkan apa adanya dari DB
+  if (status === "APPROVED")  status = "IN_PROGRESS"; // FIX: was wrongly mapped to DONE
+  if (status === "REJECTED")  status = "REJECT";       // normalize legacy
 
   return {
     ...raw,

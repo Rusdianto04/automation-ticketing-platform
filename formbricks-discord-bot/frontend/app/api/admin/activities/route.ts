@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     const compParam  = url.searchParams.get("component"); // DISCORD_BOT|N8N_WORKFLOW|etc
     const sinceParam = url.searchParams.get("since");   // ISO timestamp untuk polling
 
-    const limit = Math.min(parseInt(limitParam || "100"), 200);
+    const limit = Math.min(parseInt(limitParam || "30"), 200);
 
     // Query activities dari DB
     const where: any = {};
@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
     const allActivities = await p.activity.findMany({
       select: { type: true },
       orderBy: { created_at: "desc" },
-      take: 500,
+      take: 200,
     });
 
     const statsMap = { total: allActivities.length, success: 0, errors: 0, warns: 0 };

@@ -58,15 +58,27 @@ function getTicketTitle(ticket) {
   if (ticket.type === "INCIDENT") return fields["Incident Information"] || "Incident Report";
   return fields["Issue"] || "Ticket Support";
 }
-
 /**
- * Format array assignee untuk tampilan Discord (mention).
+ * Format array assignee untuk tampilan Discord.
+ * Handle dua format:
+ *   1. Array of objects: [{mention, username, displayName, name}, ...]  (dari Discord bot)
+ *   2. Array of strings: ["Budi", "Siti", "Tim Jaringan"]               (dari Portal Admin)
  */
 function formatAssigneeForDiscord(assigneeArray) {
   if (!Array.isArray(assigneeArray) || assigneeArray.length === 0) {
     return "(Belum ada petugas yang ditugaskan)";
   }
-  return assigneeArray.map((a) => a.mention).join(" ");
+  return assigneeArray
+    .map((a) => {
+      if (typeof a === "string") return a.trim() || null;
+      if (typeof a === "object" && a !== null) {
+        // Prioritas: mention (Discord @tag) > displayName > username > name
+        return a.mention || a.displayName || a.username || a.name || null;
+      }
+      return null;
+    })
+    .filter(Boolean)
+    .join(", ") || "(Belum ada petugas yang ditugaskan)";
 }
 
 /**

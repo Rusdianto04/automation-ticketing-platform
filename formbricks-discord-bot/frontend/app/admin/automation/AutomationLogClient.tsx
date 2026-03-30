@@ -90,7 +90,7 @@ export default function AutomationLogClient() {
       try {
         setErrorMsg("");
 
-        const params = new URLSearchParams({ limit: "100" });
+        const params = new URLSearchParams({ limit: "30" });
 
         if (filterLevel) params.set("level", filterLevel);
         if (filterComp) params.set("component", filterComp);

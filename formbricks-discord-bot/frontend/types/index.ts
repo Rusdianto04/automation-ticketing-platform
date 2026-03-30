@@ -1,6 +1,17 @@
 // types/index.ts
 
-export type TicketStatus = "OPEN" | "PENDING" | "DONE" | "REJECT" | "INVESTIGASI" | "MITIGASI" | "RESOLVED";
+export type TicketStatus =
+  | "OPEN"
+  | "PENDING"
+  | "IN_PROGRESS"   // Frontend display (mapped dari APPROVED di DB)
+  | "APPROVED"      // DB raw value (dari !status approve di Discord)
+  | "DONE"
+  | "REJECT"
+  | "REJECTED"      // DB raw value (mapped ke REJECT di frontend)
+  | "INVESTIGASI"
+  | "MITIGASI"
+  | "RESOLVED";
+
 export type TicketType   = "TICKETING" | "INCIDENT";
 
 export interface AssigneeInfo {

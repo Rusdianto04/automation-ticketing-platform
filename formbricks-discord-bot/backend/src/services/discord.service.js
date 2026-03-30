@@ -75,12 +75,12 @@ function buildTicketInfoMessage(ticket) {
   const summaryTicket = ticket.summaryTicket        || ticket.summary_ticket;
   const updatedAt     = ticket.updatedAt            || ticket.updated_at;
 
-  // Status mapping — identik dengan original
+  /// Status mapping
   let currentStatus = "Open";
-  if (status === "PENDING")       currentStatus = "Pending";
-  else if (status === "APPROVED") currentStatus = "In Progress";
-  else if (status === "REJECTED") currentStatus = "Rejected";
-  else if (status === "DONE")     currentStatus = "Done";
+  if (status === "PENDING")                              currentStatus = "Pending";
+  else if (status === "APPROVED" || status === "IN_PROGRESS") currentStatus = "In Progress";
+  else if (status === "REJECTED" || status === "REJECT") currentStatus = "Rejected";
+  else if (status === "DONE")                            currentStatus = "Done";
 
   const statusNoteStr = (statusNote && statusNote.trim() !== "") ? ` (${statusNote})` : "";
   const updatedStr    = updatedAt ? formatDateTime(updatedAt) : formatDateTime(new Date());
@@ -168,15 +168,22 @@ function buildIncidentInfoMessage(ticket) {
   const createdAt     = ticket.createdAt           || ticket.created_at;
   const resolvedAt    = ticket.resolvedAt          || ticket.resolved_at;
 
-  // Status mapping + durasi resolved — identik dengan original
+  // Status mapping + durasi resolved
   let statusText   = "Open";
   let statusDetail = "";
-  if (status === "OPEN")             statusText = "Open";
-  else if (status === "INVESTIGASI") statusText = "Investigasi";
-  else if (status === "MITIGASI")    statusText = "Mitigasi";
-  else if (status === "RESOLVED") {
-    statusText   = "Resolved";
-    statusDetail = formatResolvedStatus(createdAt, resolvedAt);
+  if (status === "OPEN")                               { statusText = "Open"; }
+  else if (status === "INVESTIGASI")                   { statusText = "Investigasi"; }
+  else if (status === "MITIGASI")                      { statusText = "Mitigasi"; }
+  else if (status === "RESOLVED" || status === "DONE") {
+    statusText = "Resolved";
+    if (ticket.resolvedAt || ticket.resolved_at) {
+      const resolvedAt = new Date(ticket.resolvedAt || ticket.resolved_at);
+      const createdAt  = new Date(ticket.createdAt  || ticket.created_at);
+      const diffMs     = resolvedAt.getTime() - createdAt.getTime();
+      const h = Math.floor(diffMs / 3600000);
+      const m = Math.floor((diffMs % 3600000) / 60000);
+      statusDetail = ` (${formatDateTime(resolvedAt)} - ${h > 0 ? `${h} Hour${h > 1 ? "s" : ""} ` : ""}${m} Menit)`;
+    }
   }
 
   // Handling section — summary (summaryTicket) ditampilkan sebagai "Handling:" di pinned message
@@ -406,10 +413,10 @@ async function updateThreadTitle(ticket) {
       else if (status === "MITIGASI") prefix = "[MITIGASI] ";
       else if (status === "RESOLVED") prefix = "[CLOSED] ";
     } else {
-      if (status === "PENDING")        prefix = "[PENDING] ";
-      else if (status === "APPROVED")  prefix = "[IN PROGRESS] ";
-      else if (status === "REJECTED")  prefix = "[REJECTED] ";
-      else if (status === "DONE")      prefix = "[CLOSED] ";
+      if (status === "PENDING")                              prefix = "[PENDING] ";
+      else if (status === "APPROVED" || status === "IN_PROGRESS") prefix = "[IN PROGRESS] ";
+      else if (status === "REJECTED" || status === "REJECT") prefix = "[REJECTED] ";
+      else if (status === "DONE")                            prefix = "[CLOSED] ";
     }
 
     const typeLabel = ticket.type === "INCIDENT" ? "[Incident]" : "[Support]";
