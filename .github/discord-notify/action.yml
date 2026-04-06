@@ -1,0 +1,49 @@
+name: Discord Notify Composite
+description: Composite action untuk mengirim pesan webhook ke Discord
+
+inputs:
+  webhook:
+    description: 'Discord webhook URL (gunakan secret)'
+    required: true
+  status:
+    description: 'success | failure | info'
+    required: true
+  title:
+    description: 'Judul embed notifikasi'
+    required: true
+  body:
+    description: 'Isi/deskripsi embed notifikasi'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Send Discord Notification
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook }}
+        STATUS: ${{ inputs.status }}
+        TITLE: ${{ inputs.title }}
+        BODY: ${{ inputs.body }}
+      run: |
+        case "$STATUS" in
+          success) COLOR=3066993  ;;   # Hijau
+          failure) COLOR=15158332 ;;   # Merah
+          *)       COLOR=9807270  ;;   # Orange (info)
+        esac
+
+        jq -n \
+          --arg title "$TITLE" \
+          --arg body "$BODY" \
+          --argjson color "$COLOR" \
+          --arg timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+          '{
+            embeds: [{
+              title: $title,
+              description: $body,
+              color: $color,
+              timestamp: $timestamp
+            }]
+          }' | curl -s -X POST "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d @-

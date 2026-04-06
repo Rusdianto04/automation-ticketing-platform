@@ -1,0 +1,68 @@
+name: notify-issue
+
+on:
+  issues:
+    types: [ opened ]
+
+jobs:
+  notify:
+    name: Notif Discord + Buat Thread saat Issue dibuka
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kirim pesan Discord & simpan message ID
+        id: discord_message
+        shell: bash
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bot ${{ secrets.DISCORD_BOT_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://discord.com/api/v10/channels/${{ secrets.DISCORD_CHANNEL_ID }}/messages" \
+            -d "{
+              \"content\": \"📌 **New GitHub Issue Opened**\n\n**${{ github.event.issue.title }}**\n\n${{ github.event.issue.html_url }}\n\nOpened by: \`${{ github.event.issue.user.login }}\`\"
+            }")
+
+          MESSAGE_ID=$(echo "$RESPONSE" | jq -r .id)
+
+          if [ "$MESSAGE_ID" = "null" ] || [ -z "$MESSAGE_ID" ]; then
+            echo "Gagal membuat pesan Discord:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "MESSAGE_ID=$MESSAGE_ID" >> $GITHUB_OUTPUT
+
+      - name: Buat thread Discord untuk issue
+        id: discord_thread
+        shell: bash
+        run: |
+          THREAD=$(curl -s -X POST \
+            -H "Authorization: Bot ${{ secrets.DISCORD_BOT_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://discord.com/api/v10/channels/${{ secrets.DISCORD_CHANNEL_ID }}/messages/${{ steps.discord_message.outputs.MESSAGE_ID }}/threads" \
+            -d "{
+              \"name\": \"Issue-${{ github.event.issue.number }}: ${{ github.event.issue.title }}\"
+            }")
+
+          THREAD_ID=$(echo "$THREAD" | jq -r .id)
+
+          if [ "$THREAD_ID" = "null" ] || [ -z "$THREAD_ID" ]; then
+            echo "Gagal membuat thread Discord:"
+            echo "$THREAD"
+            exit 1
+          fi
+
+          THREAD_URL="https://discord.com/channels/${{ secrets.DISCORD_GUILD_ID }}/$THREAD_ID"
+          echo "THREAD_URL=$THREAD_URL" >> $GITHUB_ENV
+
+      - name: Komentar di GitHub Issue dengan link thread Discord
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              body: `✅ Thread Discord telah dibuat untuk issue ini:\n${process.env.THREAD_URL}`
+            });

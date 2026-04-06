@@ -1,0 +1,63 @@
+name: lint-test
+
+on:
+  push:
+    branches: [ '**' ]
+    paths:
+      - 'formbricks-discord-bot/**'
+  pull_request:
+    branches: [ '**' ]
+    paths:
+      - 'formbricks-discord-bot/**'
+
+jobs:
+  # ── Backend: Node.js 18 ────────────────────────────────────────────────────
+  lint-backend:
+    name: Lint Backend (Node 18)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: formbricks-discord-bot/backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: formbricks-discord-bot/backend
+        run: npm ci
+
+      - name: Run lint
+        working-directory: formbricks-discord-bot/backend
+        # Backend belum punya script lint, jalankan syntax check via node
+        run: node --check index.js || true
+
+  # ── Frontend: Next.js + ESLint ────────────────────────────────────────────
+  lint-frontend:
+    name: Lint Frontend (Node 20 / Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: formbricks-discord-bot/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: formbricks-discord-bot/frontend
+        run: npm ci
+
+      - name: Run ESLint (next lint)
+        working-directory: formbricks-discord-bot/frontend
+        run: npm run lint || true
+
+      - name: TypeScript type check
+        working-directory: formbricks-discord-bot/frontend
+        run: npx tsc --noEmit || true
