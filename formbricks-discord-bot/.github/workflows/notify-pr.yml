@@ -1,0 +1,29 @@
+name: notify-pr
+
+on:
+  pull_request:
+    types: [ opened, reopened, synchronize ]
+    paths:
+      - 'formbricks-discord-bot/**'
+
+jobs:
+  notify:
+    name: Notif Discord saat PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Send Discord notification
+        uses: ./.github/actions/discord-notify
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status:  info
+          title:   "🔀 PR: ${{ github.event.pull_request.title }}"
+          body: |
+            **Oleh:** ${{ github.event.pull_request.user.login }}
+            **From:** `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            **Status:** ${{ github.event.action }}
+
+            🔗 ${{ github.event.pull_request.html_url }}

@@ -1,0 +1,37 @@
+name: notify-discord
+
+on:
+  workflow_run:
+    workflows:
+      - ci-build-push
+      - lint-test
+      - deploy-staging
+      - deploy-production
+    types:
+      - completed
+
+jobs:
+  notify:
+    name: Kirim Notifikasi ke Discord
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Send Discord Notification
+        uses: ./.github/actions/discord-notify
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status:  ${{ github.event.workflow_run.conclusion }}
+          title: >
+            ${{ github.event.workflow_run.name }}
+            (#${{ github.event.workflow_run.run_number }})
+          body: |
+            **Status:** ${{ github.event.workflow_run.conclusion }}
+            **Repository:** `${{ github.repository }}`
+            **Branch:** `${{ github.event.workflow_run.head_branch }}`
+            **Commit:** `${{ github.event.workflow_run.head_sha }}`
+            **Actor:** ${{ github.event.workflow_run.actor.login }}
+
+            🔗 [Lihat Logs](${{ github.event.workflow_run.html_url }})
