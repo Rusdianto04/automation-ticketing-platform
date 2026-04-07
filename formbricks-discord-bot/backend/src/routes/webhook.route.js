@@ -26,30 +26,31 @@ const { sendEmail, buildConfirmationEmail } = require("../services/email.service
 const { normalizeTicket, cleanValue } = require("../utils/ticket");
 const { getPublicUrl } = require("../utils/network");
 
-// ─── Formbricks Field Maps ────────────────────────────────────────────────────
-
-const TICKETING_FIELDS = [
-  ["furan0qd44wk06zh1x7eol86", "Reporter Information"],
-  ["wxro33g8v747alp0f5h5rjiu", "Division"],
-  ["ubv5h3uuh9lqwgw2rb1xcl0t", "No Telepon"],
-  ["q4jlog6h436dwbdqdxoxnhy0", "Email"],
-  ["pekxomijpxixcvhkyx1ax0kh", "ID Device"],
-  ["q0exb43ez6zw9o5xti6isu4w", "Ruangan"],
-  ["u7n6ai5rt0ro8iybkfmle7li", "Lantai"],
-  ["ngwljbqzvr6mg1xq33v0zhk5", "Tanggal & Waktu Pemohon"],
-  ["j5hge2t3a59uw9zuw0l4s63c", "Type of Support Requested"],
-  ["funs3653dc10m0ohm7regqm6", "Issue"],
-  ["da2u7brsaabl48ympasqqzik", "Jumlah Barang"],
+// Static Form field names (digunakan oleh static portal — tanpa Formbricks)
+const STATIC_TICKETING_FIELDS = [
+  "Reporter Information",
+  "Division",
+  "No Telepon",
+  "Email",
+  "ID Device",
+  "Ruangan",
+  "Lantai",
+  "Tanggal & Waktu Pemohon",
+  "Type of Support Requested",
+  "Issue",
+  "Jumlah Barang",
+  "Attachment",
 ];
 
-const INCIDENT_FIELDS = [
-  ["j5hge2t3a59uw9zuw0l4s63c", "Incident Information"],
-  ["it9s4530lxie67jogjhbvl8z", "Date Incident"],
-  ["dw20caznxsng3uprsnxvt5nr", "Time Incident"],
-  ["bsq3gnstra5d40chamn1j7bg", "Priority Incident"],
-  ["f3r029x47v9su3w173fwn4ki", "Severity Incident"],
-  ["sbt48laul3xtcm3kwggf4tpi", "Suspect Area"],
-  ["lzwo9voycdeywln54rv68f2q", "Indicated Issue"],
+const STATIC_INCIDENT_FIELDS = [
+  "Incident Title",
+  "Incident Information",
+  "Date & Time Incident",
+  "Priority Incident",
+  "Severity Incident",
+  "Suspect Area",
+  "Indicated Issue",
+  "Attachment",
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

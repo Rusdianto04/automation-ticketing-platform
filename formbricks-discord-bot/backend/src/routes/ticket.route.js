@@ -23,6 +23,8 @@ const ActivityModel  = require("../models/activity.model");
 const DiscordService = require("../services/discord.service");
 const { validateApiKey } = require("../middleware/auth");
 const { getTicketMode }  = require("../utils/ticket");
+const { sendEmail, buildConfirmationEmail } = require("../services/email.service");
+const { getPublicUrl } = require("../utils/network");
 
 // ---- Helpers ----------------------------------------------------------------
 
@@ -99,8 +101,8 @@ router.get("/", validateApiKey, async (req, res) => {
       return {
         id:         t.id,
         type:       t.type,
-        title:      t.type === "INCIDENT"
-          ? (ff["Incident Information"] || ff["Issue"] || "Incident Report")
+        title: t.type === "INCIDENT"
+          ? (ff["Incident Title"] || ff["Incident Information"] || ff["Issue"] || "Incident Report")
           : (ff["Issue"] || "Ticket Support"),
         status:     t.status_pengusulan  ?? t.statusPengusulan,
         statusNote: t.status_note        ?? t.statusNote,
@@ -468,11 +470,11 @@ router.post("/find-similar", validateApiKey, async (req, res) => {
   }
 });
 
-// POST /api/ticket/create — buat tiket dari Peppermint Portal
+// POST /api/ticket/create — buat tiket dari Static Portal (User & Admin)
 router.post("/create", validateApiKey, async (req, res) => {
   try {
-    const { formFields, createdBy, autoCreateDiscord = false } = req.body;
-    // FIX: normalize SUPPORT → TICKETING (backward compat)
+    const { formFields, createdBy, autoCreateDiscord = true } = req.body;
+    // Normalize SUPPORT → TICKETING (backward compat)
     let type = req.body.type;
     if (type === "SUPPORT") type = "TICKETING";
 
@@ -482,8 +484,9 @@ router.post("/create", validateApiKey, async (req, res) => {
       return res.status(400).json({ error: `type tidak valid. Gunakan: ${config.ticket.validTypes.join(", ")}` });
     }
 
+    // ── Judul & keywords ──────────────────────────────────────────────────────
     const title = type === "INCIDENT"
-      ? (formFields["Incident Information"] || formFields["Issue"] || "Incident")
+      ? (formFields["Incident Title"] || formFields["Incident Information"] || formFields["Issue"] || "Incident")
       : (formFields["Issue"] || "Support Request");
 
     const STOPWORDS = new Set(["yang","untuk","dari","dengan","adalah","pada","ke","di","dan","atau","ini","itu","ada","tidak","bisa","cara","saya","kami"]);
@@ -493,9 +496,15 @@ router.post("/create", validateApiKey, async (req, res) => {
       .filter((w) => w.length > 3 && !STOPWORDS.has(w))
       .slice(0, 12);
 
+    // ── Tentukan form_id berdasarkan sumber ───────────────────────────────────
+    const formId = createdBy && String(createdBy).startsWith("admin")
+      ? "admin_portal"
+      : "static_portal";
+
+    // ── Buat tiket di DB ──────────────────────────────────────────────────────
     let ticket = await TicketModel.create({
       type,
-      formId:            "peppermint_portal",
+      formId,
       formFields,
       statusPengusulan:   "OPEN",
       evidenceAttachment: [],
@@ -505,9 +514,12 @@ router.post("/create", validateApiKey, async (req, res) => {
     await ActivityModel.create({
       ticketId:    ticket.id,
       type:        "created",
-      description: `Tiket dibuat dari Peppermint Portal oleh ${createdBy || "user"}`,
+      description: `Tiket dibuat dari ${formId} oleh ${createdBy || "user"}`,
     });
 
+    console.log(`✅ [TICKET/CREATE] Ticket #${ticket.id} (${type}) dibuat oleh ${createdBy || "user"}`);
+
+    // ── Discord thread (non-blocking, default ON untuk static portal) ─────────
     let discordThread = null;
     if (autoCreateDiscord) {
       try {
@@ -523,12 +535,51 @@ router.post("/create", validateApiKey, async (req, res) => {
           },
         });
         discordThread = { threadId: thread.id, threadUrl: thread.url };
+        console.log(`✅ [TICKET/CREATE] Discord thread: ${thread.url}`);
       } catch (discordErr) {
-        console.error("[TICKET] Portal create Discord failed:", discordErr.message);
+        console.error("[TICKET/CREATE] Discord thread gagal (non-fatal):", discordErr.message);
+        try {
+          await ActivityModel.create({
+            ticketId:    ticket.id,
+            type:        "discord_error",
+            description: `Discord thread gagal: ${discordErr.message.substring(0, 200)}`,
+          });
+        } catch (_) {}
       }
     }
 
-    res.status(201).json({ success: true, ticketId: ticket.id, discord: discordThread });
+    // ── Email konfirmasi ke pelapor ───────────────────────────────────────────
+    // Ambil email dari form_fields["Email"] — wajib diisi di form
+    const emailTo = (formFields["Email"] || "").trim();
+    if (emailTo && emailTo.includes("@")) {
+      try {
+        const portalUrl    = getPublicUrl();
+        const emailSubject = `Konfirmasi Penerimaan Ticket ${type === "INCIDENT" ? "Incident" : "Support"} #${ticket.id}`;
+        const emailHtml    = buildConfirmationEmail(ticket, type, portalUrl);
+
+        // Fire-and-forget — tidak blocking response
+        sendEmail({ to: emailTo, subject: emailSubject, html: emailHtml })
+          .then((info) => {
+            if (info) console.log(`✅ [TICKET/CREATE] Email konfirmasi terkirim ke ${emailTo}`);
+          })
+          .catch((err) => console.error(`❌ [TICKET/CREATE] Email gagal ke ${emailTo}:`, err.message));
+
+        console.log(`📧 [TICKET/CREATE] Email sedang dikirim ke ${emailTo}...`);
+      } catch (emailErr) {
+        // Non-fatal — tiket tetap terbuat
+        console.error("[TICKET/CREATE] Email error (non-fatal):", emailErr.message);
+      }
+    } else {
+      console.warn(`⚠ [TICKET/CREATE] Email tidak dikirim — field Email kosong atau tidak valid`);
+    }
+
+    // ── Response ──────────────────────────────────────────────────────────────
+    res.status(201).json({
+      success:   true,
+      ticketId:  ticket.id,
+      discord:   discordThread,
+      emailSent: !!(emailTo && emailTo.includes("@")),
+    });
   } catch (err) {
     console.error("[TICKET] POST /create error:", err.message);
     res.status(500).json({ error: err.message });

@@ -5,233 +5,174 @@ import ExcelJS from "exceljs";
 
 export const dynamic = "force-dynamic";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function getField(fields: Record<string, unknown>, ...keys: string[]): string {
-  for (const key of keys) {
-    const val = fields[key];
-    if (val !== undefined && val !== null && val !== "") {
-      if (Array.isArray(val)) return val.join(", ");
-      return String(val);
-    }
-  }
-  return "—";
-}
-
-function formatAssignee(assignee: unknown): string {
-  if (!assignee) return "—";
-  let arr: unknown = assignee;
-  if (typeof arr === "string") {
-    try { arr = JSON.parse(arr); } catch { return arr as string; }
-  }
-  if (!Array.isArray(arr)) return String(assignee);
-  return (arr as unknown[])
-    .map((a) => {
-      if (typeof a === "string") return a;
-      if (a && typeof a === "object") {
-        const o = a as Record<string, string>;
-        return o.displayName || o.username || o.name || "";
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join(", ") || "—";
-}
-
-function formatEvidence(evidence: unknown): string {
-  if (!evidence) return "—";
-  let arr: unknown = evidence;
-  if (typeof arr === "string") {
-    try { arr = JSON.parse(arr); } catch { return arr as string; }
-  }
-  if (!Array.isArray(arr)) return String(evidence);
-  return (arr as unknown[])
-    .map((e) => {
-      if (typeof e === "string") return e;
-      if (e && typeof e === "object") {
-        const o = e as Record<string, string>;
-        return o.url || o.link || "";
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n") || "—";
-}
-
-// Helper border — semua sisi thin
-const borderAll: Partial<ExcelJS.Borders> = {
-  top:    { style: "thin", color: { argb: "FF000000" } },
-  bottom: { style: "thin", color: { argb: "FF000000" } },
-  left:   { style: "thin", color: { argb: "FF000000" } },
-  right:  { style: "thin", color: { argb: "FF000000" } },
-};
-
-// ── Handler ────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
-    const url   = new URL(req.url);
-    const month = parseInt(url.searchParams.get("month") || "0", 10);
-    const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+    const { searchParams } = new URL(req.url);
+    const startDate = searchParams.get("startDate");
+    const endDate   = searchParams.get("endDate");
+    const status    = searchParams.get("status");
+    const month     = searchParams.get("month");
+    const year      = searchParams.get("year");
 
-    const now         = new Date();
-    const targetMonth = month > 0 ? month : now.getMonth() + 1;
-    const targetYear  = year  > 0 ? year  : now.getFullYear();
-
-    const startUTC = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
-    const endUTC   = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
-
-    const MONTHS_ID = [
-      "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-    ];
-    const monthLabel = MONTHS_ID[targetMonth] || `Bulan${targetMonth}`;
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p = prisma as any;
-    const tickets = await p.ticket.findMany({
-      where: {
-        type: "INCIDENT",
-        created_at: { gte: startUTC, lt: endUTC },
-      },
-      orderBy: { created_at: "asc" },
+    const where: Record<string, unknown> = { type: "INCIDENT" };
+    if (status && status !== "ALL") where.status_pengusulan = status;
+
+    if (month && year) {
+      const m = parseInt(month); const y = parseInt(year);
+      const start = new Date(y, m - 1, 1);
+      const end   = new Date(y, m, 0, 23, 59, 59, 999);
+      where.created_at = { gte: start, lte: end };
+    } else if (startDate || endDate) {
+      where.created_at = {};
+      if (startDate) (where.created_at as Record<string, unknown>).gte = new Date(startDate);
+      if (endDate) { const e = new Date(endDate); e.setHours(23,59,59,999); (where.created_at as Record<string, unknown>).lte = e; }
+    }
+
+    const tickets = await p.ticket.findMany({ where, orderBy: { created_at: "desc" }, take: 5000 });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "IT Support Portal";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("Incident Report", {
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1 },
     });
 
-    // ── Build Excel ─────────────────────────────────────────────────────────
-    const workbook   = new ExcelJS.Workbook();
-    workbook.creator = "SIS Portal";
-    workbook.created = new Date();
+    // Header style — warna merah gelap konsisten untuk incident
+    const hFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF7F1D1D" } };
+    const hFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 10, name: "Calibri" };
+    const hAlign: Partial<ExcelJS.Alignment> = { vertical: "middle", horizontal: "center", wrapText: true };
 
-    const sheetName = `Incident ${monthLabel} ${targetYear}`;
-    const sheet     = workbook.addWorksheet(sheetName);
-
-    sheet.columns = [
-      { header: "Title",               key: "title",    width: 38 },
-      { header: "Date/Time",           key: "datetime", width: 24 },
-      { header: "Priority",            key: "priority", width: 14 },
-      { header: "Severity",            key: "severity", width: 18 },
-      { header: "Suspect Area",        key: "area",     width: 22 },
-      { header: "Assign Team",         key: "assignee", width: 32 },
-      { header: "Action Taken",        key: "action",   width: 60 },
-      { header: "Indicated Issue",     key: "issue",    width: 38 },
-      { header: "Handling",            key: "handling", width: 55 },
-      { header: "Evidence Attachment", key: "evidence", width: 45 },
-      { header: "Status",              key: "status",   width: 32 },
+    const columns = [
+      { header: "No",                   key: "no",              width: 5  },
+      { header: "ID Tiket",             key: "id",              width: 10 },
+      { header: "Incident Title",       key: "incidentTitle",   width: 42 },
+      { header: "Date & Time Incident", key: "dateTime",        width: 26 },
+      { header: "Priority",             key: "priority",        width: 14 },
+      { header: "Severity",             key: "severity",        width: 18 },
+      { header: "Suspect Area",         key: "suspectArea",     width: 30 },
+      { header: "Indicated Issue",      key: "indicatedIssue",  width: 45 },
+      { header: "Attachment",           key: "attachment",      width: 35 },
+      { header: "Status",               key: "status",          width: 14 },
+      { header: "Catatan Status",       key: "statusNote",      width: 26 },
+      { header: "Assignee",             key: "assignee",        width: 26 },
+      { header: "Action Taken",         key: "actionTaken",     width: 45 },
+      { header: "Summary / Handling",   key: "summary",         width: 45 },
+      { header: "Root Cause",           key: "rootCause",       width: 45 },
+      { header: "Dibuat (WIB)",         key: "createdAt",       width: 22 },
+      { header: "Diperbarui (WIB)",     key: "updatedAt",       width: 22 },
+      { header: "Resolved (WIB)",       key: "resolvedAt",      width: 22 },
+      { header: "Sumber Form",          key: "formId",          width: 20 },
     ];
 
-    // ── Style header row ────────────────────────────────────────────────────
-    const headerRow = sheet.getRow(1);
+    ws.columns = columns.map((c) => ({ key: c.key, width: c.width }));
+
+    const headerRow = ws.addRow(columns.map((c) => c.header));
+    headerRow.height = 36;
     headerRow.eachCell((cell) => {
-      cell.fill = {
-        type:    "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFF2CC" },
-      };
-      cell.font      = { bold: true, color: { argb: "FF000000" }, size: 11 };
-      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      // FIX: border semua sisi pada header
-      cell.border = borderAll;
-    });
-    headerRow.height = 32;
-
-    // ── Data rows ───────────────────────────────────────────────────────────
-    tickets.forEach((t: any, idx: number) => {
-      let ff: Record<string, unknown> = {};
-      if (typeof t.form_fields === "string") {
-        try { ff = JSON.parse(t.form_fields); } catch { ff = {}; }
-      } else if (t.form_fields && typeof t.form_fields === "object") {
-        ff = t.form_fields as Record<string, unknown>;
-      }
-
-      const createdAt = new Date(t.created_at);
-
-      const dateIncident = getField(ff, "Date Incident", "Tanggal Incident", "Date");
-      const timeIncident = getField(ff, "Time Incident", "Waktu Incident", "Time");
-      const dateTimeStr  =
-        dateIncident !== "—" && timeIncident !== "—"
-          ? `${dateIncident}/${timeIncident}`
-          : createdAt.toLocaleString("id-ID", {
-              day: "2-digit", month: "2-digit", year: "numeric",
-              hour: "2-digit", minute: "2-digit",
-              timeZone: "Asia/Jakarta",
-            });
-
-      const STATUS_MAP: Record<string, string> = {
-        OPEN:        "Open",
-        INVESTIGASI: "Investigasi",
-        MITIGASI:    "Mitigasi",
-        RESOLVED:    "Resolved",
-        DONE:        "Resolved",
-        REJECT:      "Reject",
-      };
-      let statusStr = STATUS_MAP[t.status_pengusulan] || t.status_pengusulan;
-
-      if (
-        t.resolved_at &&
-        (t.status_pengusulan === "RESOLVED" || t.status_pengusulan === "DONE")
-      ) {
-        const resolvedAt  = new Date(t.resolved_at);
-        const diffMs      = resolvedAt.getTime() - createdAt.getTime();
-        const diffHours   = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMins    = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-        const resolvedStr = resolvedAt.toLocaleTimeString("id-ID", {
-          hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta",
-        });
-        statusStr = `Resolved (${resolvedStr} - ${
-          diffHours > 0 ? `${diffHours} Hour${diffHours > 1 ? "s" : ""} ` : ""
-        }${diffMins} Minutes)`;
-      }
-
-      const title =
-        getField(ff, "Incident Information", "Incident Title", "Title") !== "—"
-          ? getField(ff, "Incident Information", "Incident Title", "Title")
-          : t.summary_ticket?.split(".")[0]?.trim() || "Incident Report";
-
-      const row = sheet.addRow({
-        title,
-        datetime: dateTimeStr,
-        priority: getField(ff, "Priority Incident", "Priority"),
-        severity: getField(ff, "Severity Incident", "Severity"),
-        area:     getField(ff, "Suspect Area", "Area", "Lokasi"),
-        assignee: formatAssignee(t.assignee),
-        action:   (t.timeline_action_taken || t.timeline_tindak_lanjut || "—").trim(),
-        issue:    getField(ff, "Indicated Issue", "Issue", "Masalah"),
-        handling: t.summary_ticket || "—",
-        evidence: formatEvidence(t.evidence_attachment),
-        status:   statusStr,
-      });
-
-      // Zebra striping + FIX: border semua sisi pada data rows
-      const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
-      row.eachCell((cell) => {
-        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
-        cell.alignment = { vertical: "top", wrapText: true };
-        cell.font      = { size: 10 };
-        cell.border    = borderAll;
-      });
-      row.height = 60;
+      cell.fill = hFill; cell.font = hFont; cell.alignment = hAlign;
+      cell.border = { top: { style: "thin", color: { argb: "FF5C0A0A" } }, bottom: { style: "thin", color: { argb: "FF5C0A0A" } }, left: { style: "thin", color: { argb: "FF5C0A0A" } }, right: { style: "thin", color: { argb: "FF5C0A0A" } } };
     });
 
-    // Auto filter & freeze pane
-    sheet.autoFilter = {
-      from: { row: 1, column: 1 },
-      to:   { row: 1, column: sheet.columns.length },
-    };
-    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    const statusMap: Record<string, string> = { OPEN: "Open", PENDING: "Pending", INVESTIGASI: "Investigasi", MITIGASI: "Mitigasi", RESOLVED: "Resolved", REJECT: "Reject", REJECTED: "Reject", APPROVED: "In Progress", IN_PROGRESS: "In Progress" };
+    const statusColor: Record<string, string> = { OPEN: "FFFEF9C3", PENDING: "FFFEF3C7", INVESTIGASI: "FFFED7AA", MITIGASI: "FFE9D5FF", RESOLVED: "FFCCFBF1", REJECT: "FFFEE2E2", REJECTED: "FFFEE2E2" };
+    const priorityColor: Record<string, string> = { Critical: "FFFEE2E2", High: "FFFED7AA", Medium: "FFFEF3C7", Low: "FFD1FAE5", high: "FFFED7AA", medium: "FFFEF3C7", low: "FFD1FAE5" };
 
-    // Generate buffer
-    const buffer     = await workbook.xlsx.writeBuffer();
-    const fileName   = `Laporan_Incident_${monthLabel}_${targetYear}.xlsx`;
-    const uint8Array = new Uint8Array(buffer);
+    tickets.forEach((t: Record<string, unknown>, i: number) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let ff: any = t.form_fields;
+      if (typeof ff === "string") { try { ff = JSON.parse(ff); } catch { ff = {}; } }
+      ff = ff || {};
 
-    return new NextResponse(uint8Array, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let asgn: any = t.assignee;
+      if (typeof asgn === "string") { try { asgn = JSON.parse(asgn); } catch { asgn = []; } }
+      const assigneeStr = Array.isArray(asgn)
+        ? asgn.map((a: unknown) => { if (typeof a === "string") return a; const ao = a as Record<string, string>; return ao.username || ao.displayName || ao.name || ""; }).filter(Boolean).join(", ")
+        : "—";
+
+      const rawStatus   = String(t.status_pengusulan || "OPEN");
+      const rawPriority = String(ff["Priority Incident"] || "");
+      const incidentTitle = ff["Incident Title"] || ff["Incident Information"] || ff["Issue"] || "—";
+      const attachmentVal = String(ff["Attachment"] || "");
+
+      const createdWIB  = t.created_at  ? new Date(t.created_at  as string).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : "—";
+      const updatedWIB  = t.updated_at  ? new Date(t.updated_at  as string).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : "—";
+      const resolvedWIB = t.resolved_at ? new Date(t.resolved_at as string).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : "—";
+
+      const row = ws.addRow({
+        no: i + 1, id: `#${t.id}`,
+        incidentTitle:  incidentTitle,
+        dateTime:       ff["Date & Time Incident"] || ff["Date Incident"] || createdWIB,
+        priority:       ff["Priority Incident"]    || "—",
+        severity:       ff["Severity Incident"]    || "—",
+        suspectArea:    ff["Suspect Area"]         || "—",
+        indicatedIssue: ff["Indicated Issue"] || ff["Issue"] || "—",
+        attachment:     attachmentVal              || "—",
+        status:         statusMap[rawStatus]       || rawStatus,
+        statusNote:     String(t.status_note       || "—"),
+        assignee:       assigneeStr                || "—",
+        actionTaken:    String(t.timeline_action_taken || "—"),
+        summary:        String(t.summary_ticket    || "—"),
+        rootCause:      String(t.root_cause        || "—"),
+        createdAt:      createdWIB,
+        updatedAt:      updatedWIB,
+        resolvedAt:     resolvedWIB,
+        formId:         String(t.form_id           || "—"),
+      });
+
+      const isEven = i % 2 === 0;
+      const rowBg  = isEven ? "FFFFF8F8" : "FFFFFFFF";
+      const statusColIdx   = columns.findIndex((c) => c.key === "status")   + 1;
+      const priorityColIdx = columns.findIndex((c) => c.key === "priority") + 1;
+      const attachColIdx   = columns.findIndex((c) => c.key === "attachment") + 1;
+
+      row.height = 20;
+      row.eachCell((cell, colNumber) => {
+        cell.font      = { size: 10, name: "Calibri", color: { argb: "FF1E293B" } };
+        cell.alignment = { vertical: "middle", wrapText: colNumber >= 8 };
+        cell.border    = { top: { style: "hair", color: { argb: "FFFFE4E6" } }, bottom: { style: "hair", color: { argb: "FFFFE4E6" } }, left: { style: "hair", color: { argb: "FFFFE4E6" } }, right: { style: "hair", color: { argb: "FFFFE4E6" } } };
+
+        if (colNumber === statusColIdx) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: statusColor[rawStatus] || rowBg } };
+          cell.font = { size: 10, name: "Calibri", bold: true, color: { argb: "FF1E293B" } };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+        } else if (colNumber === priorityColIdx && rawPriority) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: priorityColor[rawPriority] || rowBg } };
+          cell.font = { size: 10, name: "Calibri", bold: true, color: { argb: "FF1E293B" } };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+        } else if (colNumber === attachColIdx && attachmentVal && attachmentVal !== "—") {
+          cell.value = { text: "Lihat Lampiran", hyperlink: attachmentVal } as ExcelJS.CellHyperlinkValue;
+          cell.font  = { size: 10, name: "Calibri", color: { argb: "FF2563EB" }, underline: true };
+          cell.fill  = { type: "pattern", pattern: "solid", fgColor: { argb: rowBg } };
+        } else {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowBg } };
+        }
+      });
+    });
+
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+    ws.autoFilter = { from: "A1", to: `${String.fromCharCode(64 + columns.length)}1` };
+
+    ws.addRow([]);
+    const infoRow = ws.addRow([`Total: ${tickets.length} incident`, "", `Diekspor: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`]);
+    infoRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF64748B" } };
+    infoRow.getCell(3).font = { italic: true, size: 10, color: { argb: "FF64748B" } };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const now    = new Date().toISOString().slice(0, 10);
+
+   return new NextResponse(buffer, {
       status: 200,
       headers: {
         "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
-        "Cache-Control":       "no-store",
+        "Content-Disposition": `attachment; filename="incident-report-${now}.xlsx"`,
       },
     });
-  } catch (err: any) {
-    console.error("[EXPORT INCIDENT]", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    console.error("[EXPORT/incident] Error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

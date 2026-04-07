@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Ticket, Activity,
+  LayoutDashboard, Ticket,
   BarChart3, Shield, LogOut, ChevronRight,
 } from "lucide-react";
 import { logoutAdminAction } from "@/app/admin/actions";
 
+// Automation Log dihapus dari navigasi sesuai requirement
 const NAV_ITEMS = [
-  { href: "/admin",            label: "Dashboard",           icon: LayoutDashboard },
-  { href: "/admin/tickets",    label: "Ticket Monitoring",   icon: Ticket },
-  { href: "/admin/automation", label: "Automation Log",      icon: Activity },
-  { href: "/admin/reports",    label: "Reports & Analytics", icon: BarChart3 },
+  { href: "/admin",         label: "Dashboard",           icon: LayoutDashboard },
+  { href: "/admin/tickets", label: "Ticket Monitoring",   icon: Ticket },
+  { href: "/admin/reports", label: "Reports & Analytics", icon: BarChart3 },
 ];
 
 export default function AdminSidebar() {
@@ -28,7 +28,7 @@ export default function AdminSidebar() {
           </div>
           <div>
             <p className="text-[13px] font-700 text-white">Admin Portal</p>
-            <p className="text-[10px] text-slate-500">Support & Incident Mgmt</p>
+            <p className="text-[10px] text-slate-500">Support &amp; Incident Mgmt</p>
           </div>
         </div>
       </div>

@@ -152,7 +152,7 @@ async function generateReport(ticketId, reportType = "STANDARD", generatedBy = "
       division:        fields["Division"]             || "N/A",
       phone:           fields["No Telepon"]           || "N/A",
       email:           fields["Email"]                || "N/A",
-      incidentDate:    fields["Date Incident"]        || formatDateOnly(createdAt),
+      incidentDate:    fields["Date & Time Incident"] || fields["Date Incident"] || formatDateOnly(createdAt),
       incidentTime:    fields["Time Incident"]        || "N/A",
       reportedDate:    formatDateForEmail(createdAt),
       priority:        fields["Priority Incident"]    || "Medium",

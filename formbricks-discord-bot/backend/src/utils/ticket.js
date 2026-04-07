@@ -4,6 +4,11 @@
  *
  * Normalisasi field, formatting, dan helper yang digunakan
  * di berbagai modul (handlers, services, routes).
+ *
+ * UPDATE v6:
+ *   - getTicketTitle: support "Incident Title" (static form baru)
+ *     sebelumnya hanya "Incident Information" (Formbricks)
+ *   - cleanValue: tetap ada untuk kompatibilitas webhook legacy
  */
 
 "use strict";
@@ -50,14 +55,26 @@ function normalizeTicketId(rawId) {
 
 /**
  * Ambil judul tiket dari form_fields.
+ * Support dua sumber:
+ *   - Static Form (baru)  : "Incident Title"
+ *   - Legacy / Discord    : "Incident Information"
+ *   - Support             : "Issue"
+ *
  * @param {object} ticket — normalized ticket
  * @returns {string}
  */
 function getTicketTitle(ticket) {
   const fields = ticket.formFields || ticket.form_fields || {};
-  if (ticket.type === "INCIDENT") return fields["Incident Information"] || "Incident Report";
+  if (ticket.type === "INCIDENT") {
+    return (
+      fields["Incident Title"]       ||
+      fields["Incident Information"] ||
+      "Incident Report"
+    );
+  }
   return fields["Issue"] || "Ticket Support";
 }
+
 /**
  * Format array assignee untuk tampilan Discord.
  * Handle dua format:
@@ -68,17 +85,19 @@ function formatAssigneeForDiscord(assigneeArray) {
   if (!Array.isArray(assigneeArray) || assigneeArray.length === 0) {
     return "(Belum ada petugas yang ditugaskan)";
   }
-  return assigneeArray
-    .map((a) => {
-      if (typeof a === "string") return a.trim() || null;
-      if (typeof a === "object" && a !== null) {
-        // Prioritas: mention (Discord @tag) > displayName > username > name
-        return a.mention || a.displayName || a.username || a.name || null;
-      }
-      return null;
-    })
-    .filter(Boolean)
-    .join(", ") || "(Belum ada petugas yang ditugaskan)";
+  return (
+    assigneeArray
+      .map((a) => {
+        if (typeof a === "string") return a.trim() || null;
+        if (typeof a === "object" && a !== null) {
+          // Prioritas: mention (Discord @tag) > displayName > username > name
+          return a.mention || a.displayName || a.username || a.name || null;
+        }
+        return null;
+      })
+      .filter(Boolean)
+      .join(", ") || "(Belum ada petugas yang ditugaskan)"
+  );
 }
 
 /**
@@ -88,7 +107,16 @@ function formatAssigneeForWeb(assigneeArray) {
   if (!Array.isArray(assigneeArray) || assigneeArray.length === 0) {
     return "(Belum ada petugas yang ditugaskan)";
   }
-  return assigneeArray.map((a) => a.username).join(", ");
+  return assigneeArray
+    .map((a) => {
+      if (typeof a === "string") return a.trim();
+      if (typeof a === "object" && a !== null) {
+        return a.username || a.displayName || a.name || "";
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join(", ");
 }
 
 /**
@@ -98,7 +126,7 @@ function formatEvidenceForDisplay(evidenceArray) {
   if (!Array.isArray(evidenceArray) || evidenceArray.length === 0) {
     return "(Belum ada lampiran)";
   }
-  return evidenceArray.map((item) => item.url).join("\n");
+  return evidenceArray.map((item) => (item.url || item)).join("\n");
 }
 
 /**
@@ -113,7 +141,8 @@ function getTicketMode(ticket) {
 }
 
 /**
- * Bersihkan nilai form dari Formbricks payload.
+ * Bersihkan nilai form dari webhook payload.
+ * Tetap ada untuk kompatibilitas webhook legacy (Formbricks / lainnya).
  */
 function cleanValue(v) {
   if (Array.isArray(v)) {

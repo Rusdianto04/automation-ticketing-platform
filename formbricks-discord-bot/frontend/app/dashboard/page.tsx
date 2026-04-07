@@ -1,43 +1,44 @@
 // app/dashboard/page.tsx
 import { Metadata } from "next";
-import { getAllTickets, getTicketStats, getTicketTitle, getRequesterName, formatDate } from "@/lib/tickets";
+import {
+  getIncidentTickets,
+  getTicketStats,
+  getTicketTitle,
+  getRequesterName,
+  formatDate,
+} from "@/lib/tickets";
 import DashboardClient from "./DashboardClient";
 
 export const metadata: Metadata = {
-  title: "Dashboard Support & Incident Portal",
+  title: "Support & Incident Portal",
 };
 
-// Force dynamic rendering — page ini query DB saat runtime, bukan build time
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [tickets, stats] = await Promise.all([
-    getAllTickets({ limit: 200 }),
+  // User portal: HANYA tampilkan incident secara publik
+  // Ticket support: user harus cari berdasarkan ID
+  const [incidents, stats] = await Promise.all([
+    getIncidentTickets(50),
     getTicketStats(),
   ]);
 
-  const ticketData = tickets.map((t) => ({
+  const incidentData = incidents.map((t) => ({
     id: t.id,
-    type: t.type,
+    type: t.type as "INCIDENT",
     title: getTicketTitle(t),
     status: t.status_pengusulan,
-    requester: getRequesterName(t),
-    assignee: Array.isArray(t.assignee)
-      ? t.assignee
-          .map((a) =>
-            typeof a === "string" ? a : (a as {username?:string;displayName?:string;name?:string}).username || (a as {username?:string;displayName?:string;name?:string}).displayName || (a as {username?:string;displayName?:string;name?:string}).name || ""
-          )
-          .filter(Boolean)
-          .join(", ")
-      : "—",
-    created_at: formatDate(t.created_at),
-    updated_at: formatDate(t.updated_at),
+    priority: (t.form_fields["Priority Incident"] as string) || "—",
+    severity: (t.form_fields["Severity Incident"] as string) || "—",
+    suspect_area: (t.form_fields["Suspect Area"] as string) || "—",
+    indicated_issue: (t.form_fields["Indicated Issue"] as string) || "—",
+    created_at: formatDate(t.created_at, true),
     raw_created: t.created_at,
   }));
 
   return (
     <DashboardClient
-      tickets={ticketData}
+      incidents={incidentData}
       stats={stats}
       orgName={process.env.ORG_NAME || "IT Support Division"}
       orgDepartment={process.env.ORG_DEPARTMENT || "IT Infrastructure"}

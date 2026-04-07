@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Save, UserCheck, RefreshCw, CheckCircle2,
   XCircle, Clock, Pencil, X, ExternalLink, FileText,
+  Paperclip, Image as ImageIcon,
 } from "lucide-react";
 import {
   adminUpdateStatusAction,
@@ -42,8 +43,6 @@ interface TicketDetail {
 const STATUS_OPTIONS_SUPPORT  = ["OPEN", "PENDING", "DONE", "REJECT"] as const;
 const STATUS_OPTIONS_INCIDENT = ["OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"] as const;
 
-// STATUS_LABELS_SUPPORT: tombol OPEN dilabel "In Progress" karena di konteks Support,
-// memilih tombol ini berarti mengerjakan ticket (equivalent !status approve di Discord).
 const STATUS_LABELS_SUPPORT: Record<string, string> = {
   OPEN:    "🔄 In Progress",
   PENDING: "⏳ Pending",
@@ -51,7 +50,6 @@ const STATUS_LABELS_SUPPORT: Record<string, string> = {
   REJECT:  "❌ Reject",
 };
 
-// STATUS_LABELS_INCIDENT: semua label sesuai nama asli status, tidak ada perubahan.
 const STATUS_LABELS_INCIDENT: Record<string, string> = {
   OPEN:        "✅ Open",
   INVESTIGASI: "🔍 Investigasi",
@@ -72,12 +70,11 @@ const STATUS_COLORS: Record<string, string> = {
   RESOLVED:    "bg-teal-50 text-teal-700 border-teal-200",
 };
 
-// Label yang ditampilkan di badge header untuk setiap status DB
 const STATUS_BADGE_LABELS: Record<string, string> = {
-  OPEN:        "In Progress",  // Support: OPEN di DB = In Progress
+  OPEN:        "In Progress",
   PENDING:     "Pending",
-  APPROVED:    "In Progress",  // raw dari Discord !status approve
-  IN_PROGRESS: "In Progress",  // hasil mapping dari lib/tickets.ts
+  APPROVED:    "In Progress",
+  IN_PROGRESS: "In Progress",
   DONE:        "Done",
   REJECT:      "Reject",
   REJECTED:    "Reject",
@@ -85,42 +82,45 @@ const STATUS_BADGE_LABELS: Record<string, string> = {
   MITIGASI:    "Mitigasi",
   RESOLVED:    "Resolved",
 };
-/**
- * Normalisasi status dari DB ke nilai tombol yang tersedia di STATUS_OPTIONS.
- * Diperlukan agar tombol yang aktif bisa ter-highlight dengan benar.
- *
- * Mapping:
- *   APPROVED  → "OPEN"   (Support: tombol "In Progress" = key OPEN)
- *   REJECTED  → "REJECT" (normalisasi legacy)
- *   lainnya   → tidak berubah
- */
+
 function normalizeStatusForUI(rawStatus: string, isIncident: boolean): string {
   if (!isIncident) {
-    // APPROVED   = dari Discord !status approve
-    // IN_PROGRESS = dari mapping lib/tickets.ts (APPROVED → IN_PROGRESS)
-    // Keduanya dipetakan ke tombol "OPEN" (berlabel "In Progress") di portal admin
     if (rawStatus === "APPROVED" || rawStatus === "IN_PROGRESS") return "OPEN";
     if (rawStatus === "REJECTED" || rawStatus === "REJECT")      return "REJECT";
   }
   return rawStatus;
 }
 
+// Friendly label untuk log aktivitas — bersihkan teks "Peppermint Portal"
+function formatActivityDescription(description: string, type: string): string {
+  if (!description) return type;
+
+  let d = description;
+  // Ganti "Peppermint Portal" / "peppermint_portal"
+  d = d.replace(/peppermint[_ ]portal/gi, "Portal");
+  d = d.replace(/Tiket dibuat dari Portal/gi, "Ticket dibuat melalui Portal Users");
+  d = d.replace(/Tiket dibuat dari admin_portal/gi, "Ticket dibuat melalui Portal Admin");
+  d = d.replace(/Tiket dibuat dari static_portal/gi, "Ticket dibuat melalui Portal Users");
+  d = d.replace(/Tiket dibuat dari Portal oleh admin:/gi, "Ticket dibuat oleh Admin:");
+  d = d.replace(/Tiket dibuat dari Portal oleh/gi, "Ticket dibuat oleh");
+  // Fallback jika masih ada sisa "peppermint"
+  d = d.replace(/peppermint/gi, "Portal");
+  return d;
+}
+
 export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDetail }) {
   const isIncident    = ticket.type === "INCIDENT";
   const statusOptions = isIncident ? STATUS_OPTIONS_INCIDENT : STATUS_OPTIONS_SUPPORT;
 
-  // Normalisasi status awal agar tombol yang aktif bisa ter-highlight
   const [status, setStatus] = useState(() =>
     normalizeStatusForUI(ticket.status, isIncident)
   );
 
   const [assigneeInput, setAssigneeInput] = useState(ticket.assignee.join(", "));
-
   const [editingTicket, setEditingTicket] = useState(false);
   const [requesterEdit, setRequesterEdit] = useState(ticket.requester);
-
-  const [editingForm, setEditingForm] = useState(false);
-  const [formEdits,   setFormEdits]   = useState<Record<string, string>>(
+  const [editingForm,   setEditingForm]   = useState(false);
+  const [formEdits,     setFormEdits]     = useState<Record<string, string>>(
     Object.fromEntries(
       Object.entries(ticket.form_fields).map(([k, v]) => [
         k,
@@ -139,9 +139,6 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
 
   const handleUpdateStatus = () => {
     startTransition(async () => {
-      // FIX: Khusus Ticketing Support, tombol "OPEN" = "In Progress" secara tampilan.
-      // Di DB dan Discord disimpan sebagai "APPROVED" (konsisten dengan !status approve).
-      // Untuk Incident, tombol "OPEN" tetap dikirim sebagai "OPEN" — tidak ada mapping.
       const statusToSave = (!isIncident && status === "OPEN") ? "APPROVED" : status;
       const result = await adminUpdateStatusAction(
         ticket.id,
@@ -152,21 +149,15 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  // Label untuk tombol status — berbeda antara Support dan Incident
   const statusLabels = isIncident ? STATUS_LABELS_INCIDENT : STATUS_LABELS_SUPPORT;
-
-  // Label dan warna untuk badge di header — berdasarkan status raw dari DB
-  const rawStatus       = ticket.status;
-  const badgeLabel      = isIncident
+  const rawStatus    = ticket.status;
+  const badgeLabel   = isIncident
     ? (STATUS_LABELS_INCIDENT[rawStatus] || rawStatus).replace(/^[^\w]*/, "").trim()
     : (STATUS_BADGE_LABELS[rawStatus] || rawStatus);
   const badgeColorClass = STATUS_COLORS[rawStatus] || "bg-slate-100 text-slate-600 border-slate-200";
 
   const handleReassign = () => {
-    const assignees: string[] = assigneeInput
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const assignees: string[] = assigneeInput.split(",").map((s) => s.trim()).filter(Boolean);
     startTransition(async () => {
       const result = await adminReassignAction(ticket.id, assignees);
       if (result?.error) showMsg("error", result.error);
@@ -176,14 +167,9 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
 
   const handleSaveTicketData = () => {
     startTransition(async () => {
-      const result = await adminUpdateTicketDataAction(ticket.id, {
-        requester: requesterEdit,
-      });
+      const result = await adminUpdateTicketDataAction(ticket.id, { requester: requesterEdit });
       if (result?.error) showMsg("error", result.error);
-      else {
-        showMsg("success", "Data Ticket berhasil disimpan.");
-        setEditingTicket(false);
-      }
+      else { showMsg("success", "Data Ticket berhasil disimpan."); setEditingTicket(false); }
     });
   };
 
@@ -191,14 +177,21 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     startTransition(async () => {
       const result = await adminUpdateFormFieldsAction(ticket.id, formEdits);
       if (result?.error) showMsg("error", result.error);
-      else {
-        showMsg("success", "Data Formulir berhasil disimpan.");
-        setEditingForm(false);
-      }
+      else { showMsg("success", "Data Formulir berhasil disimpan."); setEditingForm(false); }
     });
   };
 
-  const reportUrl = ticket.report_url || "";
+  const reportUrl      = ticket.report_url || "";
+  const attachmentUrl  = (ticket.form_fields["Attachment"] as string) || "";
+  const isImageUrl     = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
+
+  // Field formulir yang ditampilkan — exclude "Attachment" (sudah ada card sendiri)
+  const displayFormFields = Object.entries(formEdits).filter(([k]) => k !== "Attachment");
+
+  // Timeline data
+  const timelineKey = isIncident ? "timeline_action_taken" : "timeline_tindak_lanjut";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const timelineData = (ticket as any)[timelineKey] || "";
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -215,9 +208,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
           </Link>
           <span className="text-slate-300">|</span>
           <div>
-            <h1 className="text-[15px] font-bold text-slate-800">
-              Kelola Ticket #{ticket.id}
-            </h1>
+            <h1 className="text-[15px] font-bold text-slate-800">Kelola Ticket #{ticket.id}</h1>
             <p className="text-[12px] text-slate-400">{ticket.title}</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -228,7 +219,6 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
             }`}>
               {isIncident ? "🚨 Incident" : "🎫 Support"}
             </span>
-            {/* Badge status: tampilkan label yang human-readable, bukan raw DB value */}
             <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold border ${badgeColorClass}`}>
               {badgeLabel}
             </span>
@@ -260,10 +250,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between">
                 <span>📋 Data Ticket</span>
                 <button
-                  onClick={() => {
-                    if (editingTicket) setRequesterEdit(ticket.requester);
-                    setEditingTicket((v) => !v);
-                  }}
+                  onClick={() => { if (editingTicket) setRequesterEdit(ticket.requester); setEditingTicket((v) => !v); }}
                   className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors"
                 >
                   {editingTicket ? <X size={12} /> : <Pencil size={12} />}
@@ -273,9 +260,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               <table className="w-full text-[13px]">
                 <tbody className="divide-y divide-slate-50">
                   <tr>
-                    <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">
-                      Reporter
-                    </th>
+                    <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">Reporter</th>
                     <td className="px-4 py-2.5 text-slate-700">
                       {editingTicket ? (
                         <input
@@ -283,9 +268,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                           onChange={(e) => setRequesterEdit(e.target.value)}
                           className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500"
                         />
-                      ) : (
-                        requesterEdit || ticket.requester
-                      )}
+                      ) : (requesterEdit || ticket.requester)}
                     </td>
                   </tr>
                   <tr>
@@ -318,8 +301,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* Data Formulir (editable) */}
-            {Object.keys(ticket.form_fields).length > 0 && (
+            {/* Data Formulir (editable) — tanpa field Attachment */}
+            {displayFormFields.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between">
                   <span>📝 Data Formulir</span>
@@ -345,23 +328,17 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                 </div>
                 <table className="w-full text-[13px]">
                   <tbody className="divide-y divide-slate-50">
-                    {Object.entries(formEdits).map(([k, v]) => (
+                    {displayFormFields.map(([k, v]) => (
                       <tr key={k}>
-                        <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">
-                          {k}
-                        </th>
+                        <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">{k}</th>
                         <td className="px-4 py-2.5 text-slate-700">
                           {editingForm ? (
                             <input
                               value={v}
-                              onChange={(e) =>
-                                setFormEdits((prev) => ({ ...prev, [k]: e.target.value }))
-                              }
+                              onChange={(e) => setFormEdits((prev) => ({ ...prev, [k]: e.target.value }))}
                               className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500"
                             />
-                          ) : (
-                            v || "—"
-                          )}
+                          ) : (v || "—")}
                         </td>
                       </tr>
                     ))}
@@ -382,31 +359,99 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             )}
 
-            {/* Summary AI */}
-            {ticket.summary_ticket && (
+            {/* Attachment — card terpisah dengan hyperlink & preview gambar */}
+            {attachmentUrl && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
-                  📄 Ringkasan AI
+                <div className="px-4 py-3 bg-slate-700 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
+                  <Paperclip size={13} />
+                  Attachment / Lampiran
                 </div>
-                <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50 border-l-4 border-l-indigo-400 m-4 rounded-r-lg">
-                  {ticket.summary_ticket}
+                <div className="p-4 space-y-3">
+                  {isImageUrl ? (
+                    <div className="space-y-3">
+                      <img
+                        src={attachmentUrl}
+                        alt="Attachment"
+                        className="max-w-full rounded-lg border border-slate-200 shadow-sm"
+                        style={{ maxHeight: "320px", objectFit: "contain" }}
+                      />
+                      <a
+                        href={attachmentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[12px] font-medium transition-colors"
+                      >
+                        <ImageIcon size={13} />
+                        Buka Gambar di Tab Baru ↗
+                      </a>
+                    </div>
+                  ) : (
+                    <a
+                      href={attachmentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[13px] font-medium transition-colors"
+                    >
+                      <ExternalLink size={13} />
+                      Buka Attachment ↗
+                    </a>
+                  )}
+                  <p className="text-[11px] text-slate-400">
+                    ℹ️ Attachment dapat diakses dari jaringan internal.
+                  </p>
                 </div>
               </div>
             )}
 
-            {/* Root Cause */}
-            {ticket.root_cause && (
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 bg-amber-800 text-amber-100 text-[12px] font-bold uppercase tracking-wider">
-                  🔍 Root Cause
+            {/* Summary AI — selalu tampil (kosong atau ada) */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
+                📄 Ringkasan AI (Summary)
+              </div>
+              {ticket.summary_ticket ? (
+                <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap bg-indigo-50 border-l-4 border-l-indigo-400 m-4 rounded-r-lg">
+                  {ticket.summary_ticket}
                 </div>
+              ) : (
+                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
+                  Ringkasan AI belum tersedia. Akan diisi otomatis setelah klasifikasi AI.
+                </div>
+              )}
+            </div>
+
+            {/* Root Cause — selalu tampil */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 bg-amber-800 text-amber-100 text-[12px] font-bold uppercase tracking-wider">
+                🔍 Root Cause Analysis
+              </div>
+              {ticket.root_cause ? (
                 <div className="p-4 text-[13px] text-amber-900 leading-relaxed whitespace-pre-wrap bg-amber-50 border-l-4 border-l-amber-400 m-4 rounded-r-lg">
                   {ticket.root_cause}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
+                  Root cause belum diisi. Akan diperbarui setelah investigasi.
+                </div>
+              )}
+            </div>
 
-            {/* Activity Log */}
+            {/* Timeline Progress — selalu tampil */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
+                ⏱️ {isIncident ? "Action Taken / Timeline" : "Timeline Progress / Tindak Lanjut"}
+              </div>
+              {timelineData ? (
+                <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {timelineData}
+                </div>
+              ) : (
+                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
+                  Belum ada progress yang dicatat.
+                </div>
+              )}
+            </div>
+
+            {/* Activity Log — dengan label yang bersih */}
             {ticket.activities.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
@@ -418,7 +463,9 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                       <Clock size={13} className="text-slate-400 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-[11px] text-slate-400">{act.created_at}</p>
-                        <p className="text-slate-600">{act.description || act.type}</p>
+                        <p className="text-slate-600">
+                          {formatActivityDescription(act.description, act.type)}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -437,9 +484,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
               <div className="p-4 space-y-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Status Baru
-                  </label>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Status Baru</label>
                   <div className="grid grid-cols-2 gap-2">
                     {statusOptions.map((s) => (
                       <button
@@ -502,7 +547,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             </div>
 
-            {/* Laporan Incident — hanya untuk ticket INCIDENT */}
+            {/* Laporan Incident — hanya untuk INCIDENT */}
             {isIncident && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-rose-800 text-rose-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
@@ -522,20 +567,20 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                     </a>
                   ) : (
                     <p className="text-[13px] text-slate-400 italic">
-                      Laporan belum tersedia. Generate terlebih dahulu via Discord Bot.
+                      Laporan belum tersedia. Generate via Discord Bot.
                     </p>
                   )}
                   <p className="text-[11px] text-slate-400">
-                    ⚠️ Laporan hanya dapat diakses dari jaringan internal perusahaan.
+                    ⚠️ Laporan hanya dapat diakses dari jaringan internal.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Discord link */}
+            {/* Discord Thread */}
             {ticket.discord?.threadUrl && (
               <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Discord</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Discord Thread</p>
                 <a
                   href={ticket.discord.threadUrl}
                   target="_blank"

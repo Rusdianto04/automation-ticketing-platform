@@ -3,7 +3,8 @@
 import Link from "next/link";
 import {
   ArrowLeft, Building2, MapPin, Layers, Hash, Package,
-  Calendar, Wrench, User, Clock, FileSearch, FileText, AlertCircle,
+  Calendar, Wrench, User, Clock, FileSearch, FileText,
+  AlertCircle, Phone, Mail, Monitor,
 } from "lucide-react";
 import type { Ticket } from "@/types";
 import { StatusBadge, TypeBadge, CardSection, AssigneeList, TimelineSection } from "./SharedComponents";
@@ -27,8 +28,8 @@ export default function TicketDetailSupport({
 
   const summaryTicket = ticket.summary_ticket || "";
   const rootCause     = ticket.root_cause     || "";
-
-  const timelineRaw = ticket.timeline_tindak_lanjut || null;
+  const timelineRaw   = ticket.timeline_tindak_lanjut || null;
+  const issueText     = (f["Issue"] as string) || "";
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -62,7 +63,7 @@ export default function TicketDetailSupport({
 
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        {/* Title Bar */}
+        {/* ── Title Bar ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-5 flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -91,20 +92,39 @@ export default function TicketDetailSupport({
           {/* ── LEFT ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            <CardSection title="Data Formulir" icon={<FileSearch size={15} />}>
+            {/* Data Formulir — Issue masuk ke sini sebagai baris terakhir multiline */}
+            <CardSection title="Data Formulir Support" icon={<FileSearch size={15} />}>
               <table className="w-full text-[13px]">
                 <tbody className="divide-y divide-slate-50">
-                  <FieldRow icon={<User size={13} />}      label="Nama Pemohon / Reporter" value={requester} />
-                  <FieldRow icon={<Layers size={13} />}    label="Lantai"                  value={(f["Lantai"]   || f["Floor"]) as string} />
-                  <FieldRow icon={<MapPin size={13} />}    label="Ruangan / Lokasi"        value={(f["Ruangan"]  || f["Room"]  || f["Location"]) as string} />
-                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen"   value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                  <FieldRow icon={<Package size={13} />}   label="Jumlah Barang"           value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
-                  <FieldRow icon={<Calendar size={13} />}  label="Tanggal & Waktu"         value={(f["Tanggal"]  || f["Date"] || createdAt) as string} />
-                  <FieldRow icon={<Wrench size={13} />}    label="Type of Support"         value={(f["Type of Support"] || f["Kategori"] || f["Category"]) as string} />
+                  <FieldRow icon={<User size={13} />}      label="Reporter Information"       value={requester} />
+                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen"      value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
+                  <FieldRow icon={<Phone size={13} />}     label="No Telepon"                 value={f["No Telepon"] as string} />
+                  <FieldRow icon={<Mail size={13} />}      label="Email"                      value={f["Email"] as string} />
+                  <FieldRow icon={<Monitor size={13} />}   label="ID Device"                  value={f["ID Device"] as string} />
+                  <FieldRow icon={<MapPin size={13} />}    label="Ruangan / Lokasi"           value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
+                  <FieldRow icon={<Layers size={13} />}    label="Lantai"                     value={(f["Lantai"] || f["Floor"]) as string} />
+                  <FieldRow icon={<Calendar size={13} />}  label="Tanggal & Waktu Pemohon"    value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
+                  <FieldRow icon={<Wrench size={13} />}    label="Type of Support Requested"  value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
+                  <FieldRow icon={<Package size={13} />}   label="Jumlah Barang"              value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
+                  {/* Issue — baris terakhir, multiline dengan background card sesuai CardSection template */}
+                  {issueText && (
+                    <tr className="hover:bg-slate-50">
+                      <th className="px-4 py-2.5 text-left align-top w-2/5 bg-slate-50/60">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-0.5">
+                          <span className="text-slate-400"><FileText size={13} /></span>
+                          Issue — Deskripsi Masalah
+                        </div>
+                      </th>
+                      <td className="px-4 py-3 text-slate-700">
+                        <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{issueText}</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </CardSection>
 
+            {/* AI Summary */}
             <CardSection title="Ringkasan Ticket (AI Summary)" icon={<FileText size={15} />}>
               {summaryTicket ? (
                 <div className="m-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-400 p-4 text-[13px] text-indigo-900 whitespace-pre-wrap leading-relaxed">
@@ -118,6 +138,7 @@ export default function TicketDetailSupport({
               )}
             </CardSection>
 
+            {/* Root Cause */}
             <CardSection title="Root Cause" icon={<FileSearch size={15} />}>
               <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${
                 rootCause
@@ -128,6 +149,7 @@ export default function TicketDetailSupport({
               </div>
             </CardSection>
 
+            {/* Timeline */}
             <CardSection title="Timeline Progress / Tindak Lanjut" icon={<Clock size={15} />}>
               <TimelineSection items={timelineRaw} />
             </CardSection>
@@ -136,7 +158,6 @@ export default function TicketDetailSupport({
 
           {/* ── RIGHT ── */}
           <div className="space-y-5">
-
             <CardSection title="Informasi Ticket" icon={<Hash size={15} />}>
               <dl className="px-4 py-3 space-y-3 text-[13px]">
                 <InfoItem label="ID Ticket" value={
@@ -146,13 +167,17 @@ export default function TicketDetailSupport({
                 <InfoItem label="Type" value={
                   <span className="font-medium text-slate-700">Ticketing Support</span>
                 } />
+                {(f["Tanggal & Waktu Pemohon"] as string) && (
+                  <InfoItem label="Tgl Pemohon" value={
+                    <span className="text-slate-600 text-[12px]">{f["Tanggal & Waktu Pemohon"] as string}</span>
+                  } />
+                )}
               </dl>
             </CardSection>
 
             <CardSection title="Assignee / Petugas" icon={<User size={15} />}>
               <AssigneeList assignees={assignees} />
             </CardSection>
-
           </div>
         </div>
       </main>
@@ -163,6 +188,7 @@ export default function TicketDetailSupport({
 function FieldRow({ icon, label, value }: {
   icon: React.ReactNode; label: string; value: string | undefined;
 }) {
+  if (!value) return null;
   return (
     <tr className="hover:bg-slate-50">
       <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
@@ -171,7 +197,7 @@ function FieldRow({ icon, label, value }: {
           {label}
         </div>
       </th>
-      <td className="px-4 py-2.5 text-slate-700 font-medium">{value || "—"}</td>
+      <td className="px-4 py-2.5 text-slate-700 font-medium">{value}</td>
     </tr>
   );
 }
@@ -179,7 +205,7 @@ function FieldRow({ icon, label, value }: {
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-2">
-      <dt className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">{label}</dt>
+      <dt className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5 shrink-0">{label}</dt>
       <dd className="text-right">{value}</dd>
     </div>
   );

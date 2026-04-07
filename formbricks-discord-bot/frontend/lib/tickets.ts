@@ -1,4 +1,5 @@
 // lib/tickets.ts — Data Access Layer (Frontend Portal)
+// Updated v6: Static Form Support, field mapping baru
 import { prisma } from "./prisma";
 import type { Ticket, TicketStatus, TicketType } from "@/types";
 
@@ -8,7 +9,7 @@ export async function getAllTickets(options?: {
   type?: string;
   search?: string;
 }): Promise<Ticket[]> {
-  const { limit = 100, status, type } = options || {};
+  const { limit = 200, status, type } = options || {};
 
   const where: Record<string, unknown> = {};
 
@@ -29,6 +30,17 @@ export async function getAllTickets(options?: {
     take: limit,
   });
 
+  return tickets.map(normalizeTicket);
+}
+
+// Ambil hanya ticket INCIDENT (untuk tampilan publik)
+export async function getIncidentTickets(limit = 50): Promise<Ticket[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tickets = await (prisma as any).ticket.findMany({
+    where: { type: "INCIDENT" },
+    orderBy: { created_at: "desc" },
+    take: limit,
+  });
   return tickets.map(normalizeTicket);
 }
 
@@ -87,7 +99,6 @@ export async function getTicketStats() {
       p.ticket.count({ where: { created_at: { gte: todayWIB } } }),
       p.ticket.count({ where: { status_pengusulan: "OPEN" } }),
       p.ticket.count({ where: { status_pengusulan: "PENDING" } }),
-      // FIX: Hitung DONE dan RESOLVED sebagai "selesai" secara terpisah
       p.ticket.count({ where: { status_pengusulan: { in: ["DONE", "RESOLVED"] } } }),
       p.ticket.count({ where: { type: "INCIDENT" } }),
       p.ticket.count({ where: { status_pengusulan: { in: ["REJECT", "REJECTED"] } } }),
@@ -97,10 +108,6 @@ export async function getTicketStats() {
 }
 
 export async function updateTicketStatus(id: number, status: TicketStatus, note?: string) {
-  // FIX: Set resolved_at untuk semua status "selesai"
-  // Support:  DONE       → set resolved_at
-  // Incident: RESOLVED   → set resolved_at
-  // Incident: INVESTIGASI, MITIGASI → hapus resolved_at (belum selesai)
   const isResolved = status === "DONE" || status === "RESOLVED";
   const isReopened = status === "OPEN" || status === "INVESTIGASI" || status === "MITIGASI" || status === "PENDING";
 
@@ -148,32 +155,21 @@ function normalizeTicket(raw: any): Ticket {
   }
 
   const discordObj = discord || {};
-
   const summaryTicket = raw.summary_ticket ?? null;
   const rootCause     = raw.root_cause     ?? null;
 
   const reportUrl =
-    raw.report_url          ||
-    discordObj.reportUrl    ||
-    discordObj.report_url   ||
-    discordObj.file_url     ||
-    discordObj.fileUrl      ||
+    raw.report_url           ||
+    discordObj.reportUrl     ||
+    discordObj.report_url    ||
+    discordObj.file_url      ||
+    discordObj.fileUrl       ||
     discordObj.reportFileUrl ||
     null;
 
-  // FIX STATUS MAPPING:
-  // DB menyimpan status asli dari Discord command:
-  //   !status approve  → APPROVED  (In Progress)
-  //   !status reject   → REJECTED  (Reject)
-  // Portal Admin menyimpan:
-  //   IN_PROGRESS → harus di-save ke DB sebagai APPROVED
-  //   REJECT      → disimpan langsung
-  // Mapping di sini untuk tampilan frontend:
-  //   APPROVED  → tampilkan sebagai IN_PROGRESS (konsisten dengan Discord "In Progress")
-  //   REJECTED  → tampilkan sebagai REJECT
   let status = raw.status_pengusulan || "OPEN";
-  if (status === "APPROVED")  status = "IN_PROGRESS"; // FIX: was wrongly mapped to DONE
-  if (status === "REJECTED")  status = "REJECT";       // normalize legacy
+  if (status === "APPROVED")  status = "IN_PROGRESS";
+  if (status === "REJECTED")  status = "REJECT";
 
   return {
     ...raw,
@@ -204,8 +200,8 @@ export function getTicketTitle(ticket: Ticket): string {
   const f = ticket.form_fields;
   if (ticket.type === "INCIDENT") {
     return (
-      (f["Incident Information"] as string) ||
       (f["Incident Title"]       as string) ||
+      (f["Incident Information"] as string) ||
       "Incident Report"
     );
   }
