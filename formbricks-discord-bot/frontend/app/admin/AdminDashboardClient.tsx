@@ -52,10 +52,27 @@ interface Props {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  OPEN:    "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  DONE:    "bg-slate-100 text-slate-600 border-slate-200",
-  REJECT:  "bg-red-50 text-red-700 border-red-200",
+  // Support statuses
+  OPEN:        "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PENDING:     "bg-amber-50 text-amber-700 border-amber-200",
+  IN_PROGRESS: "bg-blue-50 text-blue-700 border-blue-200",
+  DONE:        "bg-slate-100 text-slate-600 border-slate-200",
+  REJECT:      "bg-red-50 text-red-700 border-red-200",
+  // Incident statuses
+  INVESTIGASI: "bg-orange-50 text-orange-700 border-orange-200",
+  MITIGASI:    "bg-purple-50 text-purple-700 border-purple-200",
+  RESOLVED:    "bg-slate-100 text-slate-600 border-slate-200",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  OPEN:        "Open",
+  PENDING:     "Pending",
+  IN_PROGRESS: "In Progress",
+  DONE:        "Done",
+  REJECT:      "Rejected",
+  INVESTIGASI: "Investigasi",
+  MITIGASI:    "Mitigasi",
+  RESOLVED:    "Resolved",
 };
 
 function formatDatetime(iso: string): string {
@@ -378,7 +395,7 @@ export default function AdminDashboardClient({ stats: initialStats, recentTicket
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         STATUS_COLORS[t.status] || "bg-slate-100 text-slate-600 border-slate-200"
                       }`}>
-                        {t.status}
+                        {STATUS_LABELS[t.status] || t.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-slate-400 whitespace-nowrap">

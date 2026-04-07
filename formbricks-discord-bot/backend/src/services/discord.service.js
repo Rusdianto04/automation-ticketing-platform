@@ -114,7 +114,7 @@ function buildTicketInfoMessage(ticket) {
 • Quantity   : ${fields["Jumlah Barang"] || "N/A"}
 ----------------------------------------------
 **Ticket Detail:**
-• Date / Time  : ${fields["Tanggal & Waktu Pemohon"] ? fields["Tanggal & Waktu Pemohon"].substring(0, 10) : "N/A"}
+• Date / Time  : ${formatDateTime(ticket.createdAt || ticket.created_at)}
 • Support Type : ${fields["Type of Support Requested"] || "N/A"}
 • Issue       : ${fields["Issue"] || "N/A"}
 • Assign Team: 
@@ -203,7 +203,7 @@ function buildIncidentInfoMessage(ticket) {
 -----------------------------------------------
 **Title**               : ${getTicketTitle(ticket)}
 **Ticket ID**           : #${ticket.id}_Incident
-**Date/Time**           : ${formatIncidentDateTime(fields["Date Incident"], fields["Time Incident"])}
+**Date/Time**           : ${formatDateTime(createdAt)}
 **Priority**            : ${fields["Priority Incident"] || "N/A"}
 **Severity**            : ${fields["Severity Incident"] || "N/A"}
 **Suspect Area**        : ${fields["Suspect Area"] || "N/A"}

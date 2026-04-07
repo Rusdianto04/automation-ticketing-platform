@@ -1,75 +1,72 @@
-// app/api/admin/recent-tickets/route.ts
-// Endpoint realtime untuk tabel "Ticket Terbaru" di admin dashboard
+// app/api/tickets/upload/route.ts
+// Handle upload file attachment untuk form tiket
 
-import { NextResponse } from "next/server";
-import { prisma }        from "@/lib/prisma";
-import { getTicketTitle } from "@/lib/tickets"; // FIX: hapus normalizeTicketType (tidak ada di lib/tickets.ts)
+import { NextRequest, NextResponse } from "next/server";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
+import { existsSync } from "fs";
 
-export const dynamic = "force-dynamic";
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+];
 
-export async function GET() {
+export async function POST(req: NextRequest) {
   try {
-    const p = prisma as any;
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
 
-    const tickets = await p.ticket.findMany({
-      orderBy: { created_at: "desc" },
-      take:    10,
-      select:  {
-        id:                true,
-        type:              true,
-        form_fields:       true,
-        status_pengusulan: true,
-        created_at:        true,
-      },
+    if (!file) {
+      return NextResponse.json({ error: "File tidak ditemukan" }, { status: 400 });
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: "Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP" },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "Ukuran file maksimal 5MB" },
+        { status: 400 }
+      );
+    }
+
+    const bytes  = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    // Next.js standalone: process.cwd() adalah /app
+    // Volume di-mount ke /app/public/uploads
+        const uploadDir = "/app/public/uploads/tickets";    if (!existsSync(uploadDir)) {
+      await mkdir(uploadDir, { recursive: true });
+    }
+
+    const ext       = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const fileName  = `ticket_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const filePath  = path.join(uploadDir, fileName);
+    const publicUrl = `/uploads/tickets/${fileName}`;
+
+    await writeFile(filePath, buffer);
+
+    console.log(`[UPLOAD] File saved: ${filePath}`);
+
+    return NextResponse.json({
+      url:  publicUrl,
+      name: file.name,
+      size: file.size,
     });
-
-    const result = tickets.map((t: any) => {
-      // Pastikan form_fields selalu object, bukan string JSON
-      let formFields = t.form_fields;
-      if (typeof formFields === "string") {
-        try   { formFields = JSON.parse(formFields); }
-        catch { formFields = {}; }
-      }
-      if (!formFields || typeof formFields !== "object" || Array.isArray(formFields)) {
-        formFields = {};
-      }
-
-      const type = t.type === "INCIDENT" ? "INCIDENT" : "TICKETING";
-
-      // Ambil judul dari form_fields sesuai tipe tiket
-      let title = "Tiket Support";
-      if (type === "INCIDENT") {
-        title =
-          formFields["Incident Information"] ||
-          formFields["Incident Title"]        ||
-          "Incident Report";
-      } else {
-        title =
-          formFields["Issue"]  ||
-          formFields["Judul"]  ||
-          formFields["Title"]  ||
-          "Tiket Support";
-      }
-
-      // Normalisasi status
-      let status = t.status_pengusulan || "OPEN";
-      if (status === "RESOLVED" || status === "APPROVED") status = "DONE";
-      if (status === "REJECTED")                          status = "REJECT";
-
-      return {
-        id:         t.id,
-        type,
-        title,
-        status,
-        created_at: t.created_at instanceof Date
-          ? t.created_at.toISOString()
-          : t.created_at,
-      };
-    });
-
-    return NextResponse.json({ tickets: result });
 
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("[API/tickets/upload] Error:", err);
+    return NextResponse.json(
+      { error: "Gagal upload file", detail: err.message },
+      { status: 500 }
+    );
   }
 }
