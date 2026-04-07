@@ -1,6 +1,6 @@
 // app/api/tickets/[id]/route.ts
-// Proxy ke backend untuk cek status tiket by ID — User Portal
-// Privacy: hanya kembalikan field yang relevan untuk user (bukan admin data)
+// Proxy ke backend untuk cek status tiket by ID (User Portal)
+// Privacy: hanya kembalikan field yang relevan untuk user
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -14,9 +14,10 @@ const API_KEY =
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = params.id;
+  const { id } = await params;
+
   if (!id || !/^\d+$/.test(id)) {
     return NextResponse.json({ error: "ID tidak valid" }, { status: 400 });
   }
@@ -30,18 +31,19 @@ export async function GET(
     if (res.status === 404) {
       return NextResponse.json({ error: "Tiket tidak ditemukan" }, { status: 404 });
     }
+
     if (!res.ok) {
       return NextResponse.json({ error: "Gagal mengambil data tiket" }, { status: res.status });
     }
 
     const data = await res.json();
-    const t    = data.ticket;
+    const t = data.ticket;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ff: Record<string, any> = t.formFields || t.form_fields || {};
+    // Ambil form_fields
+    const ff = (t.formFields || t.form_fields || {}) as Record<string, string>;
 
-    // Privacy: kembalikan field minimal yang diperlukan user
-    // TIDAK expose: discord, activities internal, summary AI, root_cause (admin only)
+    // Privacy: hanya kembalikan field yang diperlukan user
+    // TIDAK expose: discord, activities, summary, root_cause (admin only)
     const safe = {
       id:          t.id,
       type:        t.type,
@@ -60,27 +62,30 @@ export async function GET(
   }
 }
 
-// Sanitize — kembalikan field yang relevan untuk user termasuk Email
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sanitizeFormFields(ff: Record<string, any>, type: string): Record<string, string> {
+// Sanitize form fields — kembalikan field yang relevan untuk user
+// WAJIB include "Email" agar tampil di search result
+function sanitizeFormFields(
+  ff: Record<string, string>,
+  type: string
+): Record<string, string> {
   if (type === "INCIDENT") {
     return {
-      "Incident Title":       String(ff["Incident Title"]       || ff["Incident Information"] || ""),
-      "Priority Incident":    String(ff["Priority Incident"]    || ""),
-      "Severity Incident":    String(ff["Severity Incident"]    || ""),
-      "Suspect Area":         String(ff["Suspect Area"]         || ""),
-      "Indicated Issue":      String(ff["Indicated Issue"]      || ""),
-      "Date & Time Incident": String(ff["Date & Time Incident"] || ""),
+      "Incident Title":       ff["Incident Title"]       || ff["Incident Information"] || "",
+      "Priority Incident":    ff["Priority Incident"]    || "",
+      "Severity Incident":    ff["Severity Incident"]    || "",
+      "Suspect Area":         ff["Suspect Area"]         || "",
+      "Indicated Issue":      ff["Indicated Issue"]      || "",
+      "Date & Time Incident": ff["Date & Time Incident"] || "",
     };
   }
-  // TICKETING — termasuk Email agar bisa tampil di search result
+  // TICKETING — include Email untuk ditampilkan di search result
   return {
-    "Reporter Information":      String(ff["Reporter Information"]      || ff["Name"] || ""),
-    "Division":                  String(ff["Division"]                  || ""),
-    "Email":                     String(ff["Email"]                     || ""),
-    "Type of Support Requested": String(ff["Type of Support Requested"] || ""),
-    "Issue":                     String(ff["Issue"]                     || ""),
-    "Ruangan":                   String(ff["Ruangan"]                   || ""),
-    "Lantai":                    String(ff["Lantai"]                    || ""),
+    "Reporter Information":      ff["Reporter Information"]      || ff["Name"] || "",
+    "Email":                     ff["Email"]                     || "",
+    "Division":                  ff["Division"]                  || "",
+    "Type of Support Requested": ff["Type of Support Requested"] || "",
+    "Issue":                     ff["Issue"]                     || "",
+    "Ruangan":                   ff["Ruangan"]                   || "",
+    "Lantai":                    ff["Lantai"]                    || "",
   };
 }

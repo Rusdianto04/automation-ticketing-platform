@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { logoutAdminAction } from "@/app/admin/actions";
 
-// Automation Log dihapus dari navigasi sesuai requirement
+// Automation Log DIHAPUS dari menu
 const NAV_ITEMS = [
   { href: "/admin",         label: "Dashboard",           icon: LayoutDashboard },
   { href: "/admin/tickets", label: "Ticket Monitoring",   icon: Ticket },

@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Hash, User, Clock, FileSearch,
   AlertTriangle, FileText, AlertCircle, Zap,
-  Shield, Activity,
+  Shield, Activity, AlignLeft,
 } from "lucide-react";
 import type { Ticket } from "@/types";
 import { StatusBadge, TypeBadge, CardSection, AssigneeList, TimelineSection } from "./SharedComponents";
@@ -47,12 +47,12 @@ export default function TicketDetailIncident({
   const rootCause      = ticket.root_cause     || "";
   const timelineRaw    = ticket.timeline_action_taken || ticket.timeline_tindak_lanjut || null;
 
-  const priority        = (f["Priority Incident"]    as string) || "";
-  const severity        = (f["Severity Incident"]    as string) || "";
-  const suspectArea     = (f["Suspect Area"]          as string) || "";
-  const indicatedIssue  = (f["Indicated Issue"]       as string) || (f["Issue"] as string) || "";
-  const dateTime        = (f["Date & Time Incident"]  as string) || (f["Date Incident"] as string) || "";
-  const incidentTitle   = (f["Incident Title"]        as string) || (f["Incident Information"] as string) || title;
+  const priority       = (f["Priority Incident"]   as string) || "";
+  const severity       = (f["Severity Incident"]   as string) || "";
+  const suspectArea    = (f["Suspect Area"]         as string) || "";
+  const indicatedIssue = (f["Indicated Issue"]      as string) || (f["Issue"] as string) || "";
+  const dateTime       = (f["Date & Time Incident"] as string) || (f["Date Incident"] as string) || "";
+  const incidentTitle  = (f["Incident Title"]       as string) || (f["Incident Information"] as string) || title;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -86,7 +86,7 @@ export default function TicketDetailIncident({
 
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        {/* Alert Banner */}
+        {/* ── Alert Banner ── */}
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-5 flex items-start gap-3">
           <AlertTriangle size={20} className="text-rose-600 mt-0.5 shrink-0" />
           <div>
@@ -97,7 +97,7 @@ export default function TicketDetailIncident({
           </div>
         </div>
 
-        {/* Title Bar */}
+        {/* ── Title Bar ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-5 flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -136,7 +136,7 @@ export default function TicketDetailIncident({
           {/* ── LEFT ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Data Formulir Incident — Indicated Issue baris terakhir tabel */}
+            {/* ── Data Formulir Incident — Indicated Issue masuk tabel ── */}
             <CardSection title="Data Formulir Incident" icon={<FileSearch size={15} />} accent="rose">
               <table className="w-full text-[13px]">
                 <tbody className="divide-y divide-slate-50">
@@ -154,15 +154,7 @@ export default function TicketDetailIncident({
                   )}
 
                   {dateTime && (
-                    <tr className="hover:bg-slate-50">
-                      <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                          <span className="text-rose-400"><Clock size={13} /></span>
-                          Date &amp; Time Incident
-                        </div>
-                      </th>
-                      <td className="px-4 py-2.5 text-slate-700 font-medium">{dateTime}</td>
-                    </tr>
+                    <IncidentFieldRow icon={<Clock size={13} />} label="Date &amp; Time Incident" value={dateTime} />
                   )}
 
                   {priority && (
@@ -198,28 +190,22 @@ export default function TicketDetailIncident({
                   )}
 
                   {suspectArea && (
-                    <tr className="hover:bg-slate-50">
-                      <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                          <span className="text-rose-400"><AlertTriangle size={13} /></span>
-                          Suspect Area
-                        </div>
-                      </th>
-                      <td className="px-4 py-2.5 text-slate-700 font-medium">{suspectArea}</td>
-                    </tr>
+                    <IncidentFieldRow icon={<AlertTriangle size={13} />} label="Suspect Area" value={suspectArea} />
                   )}
 
-                  {/* Indicated Issue — baris terakhir, plain text konsisten dengan template lain */}
+                  {/* ── Indicated Issue — style SAMA dengan Issue di Support ── */}
                   {indicatedIssue && (
                     <tr className="hover:bg-slate-50">
                       <th className="px-4 py-2.5 text-left align-top w-2/5 bg-slate-50/60">
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-0.5">
-                          <span className="text-rose-400"><FileText size={13} /></span>
+                          <span className="text-rose-400"><AlignLeft size={13} /></span>
                           Indicated Issue
                         </div>
                       </th>
-                      <td className="px-4 py-3 text-slate-700">
-                        <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{indicatedIssue}</p>
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
+                          {indicatedIssue}
+                        </p>
                       </td>
                     </tr>
                   )}
@@ -228,7 +214,7 @@ export default function TicketDetailIncident({
               </table>
             </CardSection>
 
-            {/* AI Summary */}
+            {/* ── AI Summary ── */}
             <CardSection title="Ringkasan Incident (AI Summary)" icon={<FileText size={15} />} accent="rose">
               {summaryTicket ? (
                 <div className="m-4 bg-rose-50 rounded-lg border-l-4 border-rose-400 p-4 text-[13px] text-rose-900 whitespace-pre-wrap leading-relaxed">
@@ -242,7 +228,7 @@ export default function TicketDetailIncident({
               )}
             </CardSection>
 
-            {/* Root Cause */}
+            {/* ── Root Cause ── */}
             <CardSection title="Root Cause Analysis" icon={<FileSearch size={15} />} accent="rose">
               <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${
                 rootCause
@@ -253,7 +239,7 @@ export default function TicketDetailIncident({
               </div>
             </CardSection>
 
-            {/* Timeline */}
+            {/* ── Timeline ── */}
             <CardSection title="Action Taken / Timeline Progress" icon={<Clock size={15} />} accent="rose">
               <TimelineSection items={timelineRaw} />
             </CardSection>
@@ -262,26 +248,45 @@ export default function TicketDetailIncident({
 
           {/* ── RIGHT ── */}
           <div className="space-y-5">
+
             <CardSection title="Informasi Ticket" icon={<Hash size={15} />}>
               <dl className="px-4 py-3 space-y-3 text-[13px]">
-                <InfoItem label="ID Ticket" value={<span className="font-mono font-bold text-rose-600">#{ticket.id}</span>} />
+                <InfoItem
+                  label="ID Ticket"
+                  value={<span className="font-mono font-bold text-rose-600">#{ticket.id}</span>}
+                />
                 <InfoItem label="Status" value={<StatusBadge status={status} />} />
-                <InfoItem label="Type"   value={<span className="font-medium text-slate-700">Incident</span>} />
+                <InfoItem
+                  label="Type"
+                  value={<span className="font-medium text-slate-700">Incident</span>}
+                />
                 {priority && (
-                  <InfoItem label="Priority" value={
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${PRIORITY_COLORS[priority] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                      {priority}
-                    </span>
-                  } />
+                  <InfoItem
+                    label="Priority"
+                    value={
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${PRIORITY_COLORS[priority] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                        {priority}
+                      </span>
+                    }
+                  />
                 )}
                 {severity && (
-                  <InfoItem label="Severity" value={<span className="text-[12px] font-semibold text-slate-700">{severity}</span>} />
+                  <InfoItem
+                    label="Severity"
+                    value={<span className="text-[12px] font-semibold text-slate-700">{severity}</span>}
+                  />
                 )}
                 {suspectArea && (
-                  <InfoItem label="Suspect Area" value={<span className="text-[12px] text-slate-600 text-right">{suspectArea}</span>} />
+                  <InfoItem
+                    label="Suspect Area"
+                    value={<span className="text-[12px] text-slate-600 text-right">{suspectArea}</span>}
+                  />
                 )}
                 {dateTime && (
-                  <InfoItem label="Tgl Incident" value={<span className="text-[11px] text-slate-600">{dateTime}</span>} />
+                  <InfoItem
+                    label="Tgl Incident"
+                    value={<span className="text-[11px] text-slate-600">{dateTime}</span>}
+                  />
                 )}
               </dl>
             </CardSection>
@@ -289,10 +294,30 @@ export default function TicketDetailIncident({
             <CardSection title="Assignee / Petugas" icon={<User size={15} />}>
               <AssigneeList assignees={assignees} />
             </CardSection>
+
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+function IncidentFieldRow({ icon, label, value }: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  if (!value) return null;
+  return (
+    <tr className="hover:bg-slate-50">
+      <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+          <span className="text-rose-400">{icon}</span>
+          {label}
+        </div>
+      </th>
+      <td className="px-4 py-2.5 text-slate-700 font-medium">{value}</td>
+    </tr>
   );
 }
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Building2, MapPin, Layers, Hash, Package,
   Calendar, Wrench, User, Clock, FileSearch, FileText,
-  AlertCircle, Phone, Mail, Monitor,
+  AlertCircle, Phone, Mail, Monitor, AlignLeft,
 } from "lucide-react";
 import type { Ticket } from "@/types";
 import { StatusBadge, TypeBadge, CardSection, AssigneeList, TimelineSection } from "./SharedComponents";
@@ -29,7 +29,6 @@ export default function TicketDetailSupport({
   const summaryTicket = ticket.summary_ticket || "";
   const rootCause     = ticket.root_cause     || "";
   const timelineRaw   = ticket.timeline_tindak_lanjut || null;
-  const issueText     = (f["Issue"] as string) || "";
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -92,31 +91,34 @@ export default function TicketDetailSupport({
           {/* ── LEFT ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Data Formulir — Issue masuk ke sini sebagai baris terakhir multiline */}
+            {/* ── Data Formulir Support — Issue masuk ke dalam tabel ── */}
             <CardSection title="Data Formulir Support" icon={<FileSearch size={15} />}>
               <table className="w-full text-[13px]">
                 <tbody className="divide-y divide-slate-50">
-                  <FieldRow icon={<User size={13} />}      label="Reporter Information"       value={requester} />
-                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen"      value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                  <FieldRow icon={<Phone size={13} />}     label="No Telepon"                 value={f["No Telepon"] as string} />
-                  <FieldRow icon={<Mail size={13} />}      label="Email"                      value={f["Email"] as string} />
-                  <FieldRow icon={<Monitor size={13} />}   label="ID Device"                  value={f["ID Device"] as string} />
-                  <FieldRow icon={<MapPin size={13} />}    label="Ruangan / Lokasi"           value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
-                  <FieldRow icon={<Layers size={13} />}    label="Lantai"                     value={(f["Lantai"] || f["Floor"]) as string} />
-                  <FieldRow icon={<Calendar size={13} />}  label="Tanggal & Waktu Pemohon"    value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
-                  <FieldRow icon={<Wrench size={13} />}    label="Type of Support Requested"  value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
-                  <FieldRow icon={<Package size={13} />}   label="Jumlah Barang"              value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
-                  {/* Issue — baris terakhir, multiline dengan background card sesuai CardSection template */}
-                  {issueText && (
+                  <FieldRow icon={<User size={13} />}      label="Reporter Information"        value={requester} />
+                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen"        value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
+                  <FieldRow icon={<Phone size={13} />}     label="No Telepon"                   value={f["No Telepon"] as string} />
+                  <FieldRow icon={<Mail size={13} />}      label="Email"                        value={f["Email"] as string} />
+                  <FieldRow icon={<Monitor size={13} />}   label="ID Device"                    value={f["ID Device"] as string} />
+                  <FieldRow icon={<MapPin size={13} />}    label="Ruangan / Lokasi"             value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
+                  <FieldRow icon={<Layers size={13} />}    label="Lantai"                       value={(f["Lantai"] || f["Floor"]) as string} />
+                  <FieldRow icon={<Calendar size={13} />}  label="Tanggal &amp; Waktu Pemohon"  value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
+                  <FieldRow icon={<Wrench size={13} />}    label="Type of Support Requested"    value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
+                  <FieldRow icon={<Package size={13} />}   label="Jumlah Barang"                value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
+
+                  {/* ── Issue — style menggunakan td colspan, SAMA dengan IncidentFieldRowMultiline ── */}
+                  {(f["Issue"] as string) && (
                     <tr className="hover:bg-slate-50">
                       <th className="px-4 py-2.5 text-left align-top w-2/5 bg-slate-50/60">
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-0.5">
-                          <span className="text-slate-400"><FileText size={13} /></span>
+                          <span className="text-slate-400"><AlignLeft size={13} /></span>
                           Issue — Deskripsi Masalah
                         </div>
                       </th>
-                      <td className="px-4 py-3 text-slate-700">
-                        <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{issueText}</p>
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
+                          {f["Issue"] as string}
+                        </p>
                       </td>
                     </tr>
                   )}
@@ -124,7 +126,7 @@ export default function TicketDetailSupport({
               </table>
             </CardSection>
 
-            {/* AI Summary */}
+            {/* ── AI Summary ── */}
             <CardSection title="Ringkasan Ticket (AI Summary)" icon={<FileText size={15} />}>
               {summaryTicket ? (
                 <div className="m-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-400 p-4 text-[13px] text-indigo-900 whitespace-pre-wrap leading-relaxed">
@@ -138,7 +140,7 @@ export default function TicketDetailSupport({
               )}
             </CardSection>
 
-            {/* Root Cause */}
+            {/* ── Root Cause ── */}
             <CardSection title="Root Cause" icon={<FileSearch size={15} />}>
               <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${
                 rootCause
@@ -149,7 +151,7 @@ export default function TicketDetailSupport({
               </div>
             </CardSection>
 
-            {/* Timeline */}
+            {/* ── Timeline ── */}
             <CardSection title="Timeline Progress / Tindak Lanjut" icon={<Clock size={15} />}>
               <TimelineSection items={timelineRaw} />
             </CardSection>
@@ -158,6 +160,7 @@ export default function TicketDetailSupport({
 
           {/* ── RIGHT ── */}
           <div className="space-y-5">
+
             <CardSection title="Informasi Ticket" icon={<Hash size={15} />}>
               <dl className="px-4 py-3 space-y-3 text-[13px]">
                 <InfoItem label="ID Ticket" value={
@@ -178,6 +181,7 @@ export default function TicketDetailSupport({
             <CardSection title="Assignee / Petugas" icon={<User size={15} />}>
               <AssigneeList assignees={assignees} />
             </CardSection>
+
           </div>
         </div>
       </main>
@@ -185,8 +189,12 @@ export default function TicketDetailSupport({
   );
 }
 
+// ─── Field Row ─────────────────────────────────────────────────────────────────
+
 function FieldRow({ icon, label, value }: {
-  icon: React.ReactNode; label: string; value: string | undefined;
+  icon: React.ReactNode;
+  label: string;
+  value: string | undefined;
 }) {
   if (!value) return null;
   return (
@@ -201,6 +209,8 @@ function FieldRow({ icon, label, value }: {
     </tr>
   );
 }
+
+// ─── Info Item ─────────────────────────────────────────────────────────────────
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (

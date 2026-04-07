@@ -514,7 +514,7 @@ router.post("/create", validateApiKey, async (req, res) => {
     await ActivityModel.create({
       ticketId:    ticket.id,
       type:        "created",
-      description: `Tiket dibuat dari ${formId} oleh ${createdBy || "user"}`,
+      description: `Tiket dibuat oleh ${createdBy && String(createdBy).startsWith("admin") ? `Admin (${createdBy.replace(/^admin:/, "")})` : (createdBy || "User")} melalui Portal`,
     });
 
     console.log(`✅ [TICKET/CREATE] Ticket #${ticket.id} (${type}) dibuat oleh ${createdBy || "user"}`);
