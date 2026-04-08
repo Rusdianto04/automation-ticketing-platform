@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback, ReactNode  } from "react";
+import { useState, useMemo, useCallback, useRef, ReactNode } from "react";
 import Link from "next/link";
 import {
   Ticket, AlertCircle, Clock, CheckCircle2, XCircle,
   Search, RefreshCw, Shield, TrendingUp, Activity,
   Settings, Plus, ChevronRight, X, Upload, Loader2,
-  FileText, Zap,
+  FileText, Zap, Image,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,33 +79,36 @@ const SEVERITY_OPTIONS = [
   "SEV 4: Low",
 ];
 
+// ─── Upload Helper — upload file ke server, return URL ────────────────────────
+// Dipanggil HANYA saat submit, bukan saat user pilih file
+async function uploadFileToServer(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/tickets/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Gagal upload file");
+  return data.url as string;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DashboardClient({ incidents, stats, orgName, orgDepartment }: Props) {
-  // Search ticket by ID
-  const [searchId, setSearchId]         = useState("");
-  const [searchResult, setSearchResult] = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
+  const [searchId, setSearchId]           = useState("");
+  const [searchResult, setSearchResult]   = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-
-  // Modal state
-  const [modal, setModal] = useState<null | "support" | "incident">(null);
-
-  // Incident detail modal
+  const [modal, setModal]                 = useState<null | "support" | "incident">(null);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRow | null>(null);
 
   const handleRefresh = useCallback(() => window.location.reload(), []);
 
-  // ─── Search ticket by ID ────────────────────────────────────────────────────
   const handleSearchTicket = useCallback(async () => {
     const rawId = searchId.trim().replace(/^#/, "");
     if (!rawId || !/^\d+$/.test(rawId)) {
       alert("Masukkan nomor ID tiket yang valid (contoh: 42 atau #42)");
       return;
     }
-
     setSearchLoading(true);
     setSearchResult(null);
-
     try {
       const res = await fetch(`/api/tickets/${rawId}`);
       if (res.status === 404) {
@@ -133,26 +136,16 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(99,102,241,0.25)" }}
-              >
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(99,102,241,0.25)" }}>
                 <Shield size={20} className="text-indigo-300" />
               </div>
               <div>
-                <h1 className="text-[15px] font-bold tracking-wide text-white">
-                  Support &amp; Incident Portal
-                </h1>
-                <p className="text-[11px] text-slate-400 leading-none mt-0.5">
-                  {orgName} &mdash; {orgDepartment}
-                </p>
+                <h1 className="text-[15px] font-bold tracking-wide text-white">Support &amp; Incident Portal</h1>
+                <p className="text-[11px] text-slate-400 leading-none mt-0.5">{orgName} &mdash; {orgDepartment}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Link
-                href="/admin/login"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] text-slate-300 hover:text-white hover:bg-white/10 transition-all"
-              >
+              <Link href="/admin/login" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] text-slate-300 hover:text-white hover:bg-white/10 transition-all">
                 <Settings size={14} />
                 <span className="hidden sm:inline">Admin Panel</span>
               </Link>
@@ -173,7 +166,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
           <StatCard label="Incident"     value={stats.incidentCount} icon={<AlertCircle size={18} />}  color="rose" />
         </div>
 
-        {/* ── Section: Cari Status Tiket by ID ── */}
+        {/* ── Cek Status Tiket by ID ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
           <div className="flex items-center gap-2 mb-4">
             <FileText size={18} className="text-indigo-600" />
@@ -204,7 +197,6 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
             </button>
           </div>
 
-          {/* Search Result */}
           {searchResult && (
             <div className={`mt-4 rounded-lg border p-4 ${searchResult.found ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
               {!searchResult.found ? (
@@ -219,7 +211,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
           )}
         </div>
 
-        {/* ── Section: Buat Tiket Baru ── */}
+        {/* ── Buat Tiket Baru ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Plus size={18} className="text-indigo-600" />
@@ -246,20 +238,15 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
           </div>
         </div>
 
-        {/* ── Section: Daftar Incident Aktif ── */}
+        {/* ── Daftar Incident Aktif ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle size={18} className="text-rose-600" />
               <h2 className="text-[15px] font-bold text-slate-800">Incident Aktif &amp; Terkini</h2>
-              <span className="ml-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold">
-                {incidents.length}
-              </span>
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold">{incidents.length}</span>
             </div>
-            <button
-              onClick={handleRefresh}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors"
-            >
+            <button onClick={handleRefresh} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors">
               <RefreshCw size={13} />
               Refresh
             </button>
@@ -295,9 +282,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                       </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <p className="font-semibold text-slate-800 truncate" title={inc.title}>{inc.title}</p>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5" title={inc.suspect_area}>
-                          Area: {inc.suspect_area}
-                        </p>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5" title={inc.suspect_area}>Area: {inc.suspect_area}</p>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${PRIORITY_COLORS[inc.priority] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
@@ -318,8 +303,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                           onClick={() => setSelectedIncident(inc)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-semibold transition-colors"
                         >
-                          Detail
-                          <ChevronRight size={12} />
+                          Detail <ChevronRight size={12} />
                         </button>
                       </td>
                     </tr>
@@ -330,57 +314,29 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
           )}
         </div>
 
-        {/* Footer */}
         <footer className="text-center text-[11px] text-slate-400 py-4">
           {orgName} &mdash; {orgDepartment} &bull; Support &amp; Incident Management Portal
         </footer>
       </main>
 
-      {/* ── Modal: Form Support ── */}
-      {modal === "support" && (
-        <SupportFormModal onClose={() => setModal(null)} />
-      )}
-
-      {/* ── Modal: Form Incident ── */}
-      {modal === "incident" && (
-        <IncidentFormModal onClose={() => setModal(null)} />
-      )}
-
-      {/* ── Modal: Detail Incident ── */}
-      {selectedIncident && (
-        <IncidentDetailModal incident={selectedIncident} onClose={() => setSelectedIncident(null)} />
-      )}
+      {modal === "support"  && <SupportFormModal  onClose={() => setModal(null)} />}
+      {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />}
+      {selectedIncident     && <IncidentDetailModal incident={selectedIncident} onClose={() => setSelectedIncident(null)} />}
     </div>
   );
 }
 
 // ─── Ticket Search Result ─────────────────────────────────────────────────────
-function TicketSearchResult({ ticket }: { ticket: any }){
-  const ff = (ticket.form_fields || ticket.formFields || {}) as Record<string, any>;
+
+function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
+  const ff = (ticket.form_fields || ticket.formFields || {}) as Record<string, unknown>;
   const status = String(ticket.status || ticket.status_pengusulan || "OPEN");
   const type   = String(ticket.type || "TICKETING");
   const isIncident = type === "INCIDENT";
 
   const STATUS_LABELS: Record<string, string> = {
-    OPEN:        "Open",
-    PENDING:     "Pending",
-    DONE:        "Done",
-    REJECT:      "Reject",
-    IN_PROGRESS: "In Progress",
-    INVESTIGASI: "Investigasi",
-    MITIGASI:    "Mitigasi",
-    RESOLVED:    "Resolved",
-  };
-
-  const STATUS_COLORS: Record<string, string> = {
-    OPEN:        "bg-emerald-50 text-emerald-700 border-emerald-200",
-    PENDING:     "bg-amber-50 text-amber-700 border-amber-200",
-    DONE:        "bg-slate-100 text-slate-600 border-slate-200",
-    REJECT:      "bg-red-50 text-red-700 border-red-200",
-    IN_PROGRESS: "bg-blue-50 text-blue-700 border-blue-200",
-    INVESTIGASI: "bg-orange-50 text-orange-700 border-orange-200",
-    MITIGASI:    "bg-purple-50 text-purple-700 border-purple-200",
-    RESOLVED:    "bg-teal-50 text-teal-700 border-teal-200",
+    OPEN: "Open", PENDING: "Pending", DONE: "Done", REJECT: "Reject",
+    IN_PROGRESS: "In Progress", INVESTIGASI: "Investigasi", MITIGASI: "Mitigasi", RESOLVED: "Resolved",
   };
 
   return (
@@ -389,10 +345,7 @@ function TicketSearchResult({ ticket }: { ticket: any }){
         <CheckCircle2 size={16} className="text-emerald-600" />
         <p className="text-[13px] font-bold text-emerald-700">Tiket ditemukan!</p>
       </div>
-
-      {/* Grid info — TANPA DIVISI sesuai requirement */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        {/* Baris 1 */}
         <InfoItem label="ID Tiket"  value={`#${String(ticket.id)}`} />
         <InfoItem label="Tipe">
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${isIncident ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>
@@ -424,8 +377,8 @@ function TicketSearchResult({ ticket }: { ticket: any }){
         )}
 
         {/* Catatan status jika ada */}
-        {ticket.status_note && (
-          <InfoItem label="Catatan Status" value={String(ticket.status_note)} />
+        {typeof ticket.status_note === "string" && (
+          <InfoItem label="Catatan Status" value={ticket.status_note} />
         )}
       </div>
 
@@ -433,8 +386,7 @@ function TicketSearchResult({ ticket }: { ticket: any }){
         href={`/tickets/${String(ticket.id)}`}
         className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[12px] font-semibold transition-colors"
       >
-        Lihat Detail Lengkap
-        <ChevronRight size={13} />
+        Lihat Detail Lengkap <ChevronRight size={13} />
       </Link>
     </div>
   );
@@ -512,8 +464,7 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
               href={`/tickets/${incident.id}`}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[13px] font-semibold transition-colors"
             >
-              Lihat Detail Lengkap
-              <ChevronRight size={14} />
+              Lihat Detail Lengkap <ChevronRight size={14} />
             </Link>
           </div>
         </div>
@@ -523,49 +474,61 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
 }
 
 // ─── Support Form Modal ───────────────────────────────────────────────────────
+// FIX: File disimpan di state sebagai File object, TIDAK langsung upload ke server.
+// Upload hanya terjadi saat tombol "Kirim Tiket Support" diklik.
+// Ini mencegah file orphan di server jika user batal atau ganti file.
 
 function SupportFormModal({ onClose }: { onClose: () => void }) {
   const now = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short" });
 
   const [form, setForm] = useState({
-    reporterInfo:    "",
-    division:        "",
-    noTelepon:       "",
-    email:           "",
-    idDevice:        "",
-    ruangan:         "",
-    lantai:          "",
-    tanggalWaktu:    now,
-    typeOfSupport:   "",
-    typeOther:       "",
-    issue:           "",
-    jumlahBarang:    "",
+    reporterInfo: "", division: "", noTelepon: "", email: "",
+    idDevice: "", ruangan: "", lantai: "", tanggalWaktu: now,
+    typeOfSupport: "", typeOther: "", issue: "", jumlahBarang: "",
   });
-  const [attachment, setAttachment]   = useState<{ url: string; name: string } | null>(null);
-  const [uploading,  setUploading]    = useState(false);
-  const [submitting, setSubmitting]   = useState(false);
-  const [success,    setSuccess]      = useState(false);
-  const [ticketId,   setTicketId]     = useState<number | null>(null);
-  const [error,      setError]        = useState("");
+
+  // Simpan File object di state — belum diupload ke server
+  const [selectedFile, setSelectedFile]   = useState<File | null>(null);
+  const [previewUrl,   setPreviewUrl]     = useState<string | null>(null);
+  const fileInputRef                       = useRef<HTMLInputElement>(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [success,    setSuccess]    = useState(false);
+  const [ticketId,   setTicketId]   = useState<number | null>(null);
+  const [error,      setError]      = useState("");
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Hanya simpan file di state lokal — TIDAK upload ke server di sini
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    try {
-      const res = await fetch("/api/tickets/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (res.ok) setAttachment({ url: data.url, name: data.name });
-      else setError(data.error || "Gagal upload file");
-    } catch {
-      setError("Gagal upload file");
-    } finally {
-      setUploading(false);
+
+    // Validasi tipe file
+    const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+    if (!allowed.includes(file.type)) {
+      setError("Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP");
+      return;
     }
+    // Validasi ukuran (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Ukuran file maksimal 5MB");
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+
+    // Buat preview URL lokal menggunakan URL.createObjectURL — TANPA upload
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSubmit = async () => {
@@ -576,8 +539,15 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
     }
     setError("");
     setSubmitting(true);
+
     try {
-      const typeValue = form.typeOfSupport === "Other" ? form.typeOther || "Other" : form.typeOfSupport;
+      // Upload file ke server HANYA saat submit
+      let attachmentUrl: string | null = null;
+      if (selectedFile) {
+        attachmentUrl = await uploadFileToServer(selectedFile);
+      }
+
+      const typeValue = form.typeOfSupport === "Other" ? (form.typeOther || "Other") : form.typeOfSupport;
       const formFields: Record<string, string> = {
         "Reporter Information":      form.reporterInfo,
         "Division":                  form.division,
@@ -591,7 +561,7 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
         "Issue":                     form.issue,
         "Jumlah Barang":             form.jumlahBarang,
       };
-      if (attachment) formFields["Attachment"] = attachment.url;
+      if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
       const res = await fetch("/api/tickets/create", {
         method: "POST",
@@ -647,7 +617,6 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
           <FormField label="Ruangan *" type="text" value={form.ruangan} onChange={(v) => set("ruangan", v)} placeholder="Nama ruangan" />
         </div>
 
-        {/* Lantai */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Lantai *</label>
           <select value={form.lantai} onChange={(e) => set("lantai", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
@@ -656,14 +625,12 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
           </select>
         </div>
 
-        {/* Tanggal & Waktu */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Tanggal &amp; Waktu Pemohon</label>
           <input type="text" value={form.tanggalWaktu} readOnly className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-slate-50 text-slate-600 cursor-not-allowed" />
           <p className="text-[11px] text-slate-400 mt-1">Terisi otomatis dari sistem</p>
         </div>
 
-        {/* Type of Support */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Type of Support Requested *</label>
           <select value={form.typeOfSupport} onChange={(e) => set("typeOfSupport", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
@@ -675,50 +642,54 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        {/* Issue */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Issue — Description of the Issue *</label>
           <textarea value={form.issue} onChange={(e) => set("issue", e.target.value)} rows={4} placeholder="Jelaskan masalah yang Anda alami secara detail..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 resize-none" />
         </div>
 
-        {/* Jumlah Barang */}
         <FormField label="Jumlah Barang" type="text" value={form.jumlahBarang} onChange={(v) => set("jumlahBarang", v)} placeholder="Contoh: 1 unit laptop" />
 
-        {/* Attachment */}
+        {/* Attachment — preview lokal, belum upload ke server */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:border-indigo-300 transition-colors">
-            {attachment ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-600">
-                  <CheckCircle2 size={16} />
-                  <span className="text-[13px] font-medium">{attachment.name}</span>
+          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+            {selectedFile ? (
+              <div className="space-y-3">
+                {/* Preview lokal dari URL.createObjectURL */}
+                {previewUrl && (
+                  <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <Image size={16} />
+                    <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                    <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                  <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 transition-colors p-1">
+                    <X size={16} />
+                  </button>
                 </div>
-                <button onClick={() => setAttachment(null)} className="text-red-500 hover:text-red-700 transition-colors">
-                  <X size={16} />
-                </button>
               </div>
             ) : (
-              <label className="cursor-pointer">
-                <div className="flex flex-col items-center gap-2 text-slate-400">
-                  {uploading ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
-                  <p className="text-[13px]">{uploading ? "Mengupload..." : "Klik untuk upload gambar atau screenshot"}</p>
+              <label className="cursor-pointer block text-center">
+                <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
+                  <Upload size={24} />
+                  <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
                   <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
                 </div>
-                <input type="file" className="hidden" accept="image/*" onChange={handleFile} disabled={uploading} />
+                <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
               </label>
             )}
           </div>
         </div>
 
-        {/* Submit */}
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleSubmit}
             disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-[13px] font-bold transition-colors"
           >
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Membuat Tiket...</> : <><Ticket size={16} /> Kirim Tiket Support</>}
+            {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim Tiket...</> : <><Ticket size={16} /> Kirim Tiket Support</>}
           </button>
           <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold transition-colors">
             Batal
@@ -730,20 +701,21 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Incident Form Modal ──────────────────────────────────────────────────────
+// FIX: Sama seperti SupportFormModal — upload hanya saat submit
 
 function IncidentFormModal({ onClose }: { onClose: () => void }) {
   const now = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short" });
 
   const [form, setForm] = useState({
-    incidentTitle:   "",
-    dateTimeIncident: now,
-    priorityIncident: "",
-    severityIncident: "",
-    suspectArea:      "",
-    indicatedIssue:   "",
+    incidentTitle: "", dateTimeIncident: now,
+    priorityIncident: "", severityIncident: "",
+    suspectArea: "", indicatedIssue: "",
   });
-  const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
-  const [uploading,  setUploading]  = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
+  const fileInputRef                     = useRef<HTMLInputElement>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [success,    setSuccess]    = useState(false);
   const [ticketId,   setTicketId]   = useState<number | null>(null);
@@ -751,22 +723,23 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    try {
-      const res = await fetch("/api/tickets/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (res.ok) setAttachment({ url: data.url, name: data.name });
-      else setError(data.error || "Gagal upload file");
-    } catch {
-      setError("Gagal upload file");
-    } finally {
-      setUploading(false);
-    }
+    const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+    if (!allowed.includes(file.type)) { setError("Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP"); return; }
+    if (file.size > 5 * 1024 * 1024) { setError("Ukuran file maksimal 5MB"); return; }
+    setError("");
+    setSelectedFile(file);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSubmit = async () => {
@@ -778,6 +751,12 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
     setError("");
     setSubmitting(true);
     try {
+      // Upload file ke server HANYA saat submit
+      let attachmentUrl: string | null = null;
+      if (selectedFile) {
+        attachmentUrl = await uploadFileToServer(selectedFile);
+      }
+
       const formFields: Record<string, string> = {
         "Incident Title":       form.incidentTitle,
         "Incident Information": form.incidentTitle,
@@ -787,7 +766,7 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
         "Suspect Area":         form.suspectArea,
         "Indicated Issue":      form.indicatedIssue,
       };
-      if (attachment) formFields["Attachment"] = attachment.url;
+      if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
       const res = await fetch("/api/tickets/create", {
         method: "POST",
@@ -815,7 +794,7 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
           <p className="text-[15px] font-bold text-slate-800 mb-2">Incident Berhasil Dilaporkan!</p>
           <p className="text-[13px] text-slate-600 mb-2">Nomor tiket incident Anda:</p>
           <p className="text-3xl font-black text-rose-600 mb-4">#{ticketId}</p>
-          <p className="text-[12px] text-slate-500 mb-6">Tim IT akan segera menangani incident ini. Incident ini akan tampil di daftar incident aktif.</p>
+          <p className="text-[12px] text-slate-500 mb-6">Tim IT akan segera menangani incident ini.</p>
           <div className="flex gap-2 justify-center">
             <Link href={`/tickets/${ticketId}`} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors">
               Lihat Detail Tiket
@@ -834,10 +813,8 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
 
-        {/* Incident Title */}
         <FormField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident yang terjadi" />
 
-        {/* Date & Time */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Date &amp; Time Incident</label>
           <input type="text" value={form.dateTimeIncident} readOnly className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-slate-50 text-slate-600 cursor-not-allowed" />
@@ -845,7 +822,6 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Priority */}
           <div>
             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Priority Incident *</label>
             <select value={form.priorityIncident} onChange={(e) => set("priorityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
@@ -853,8 +829,6 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
               {PRIORITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
-
-          {/* Severity */}
           <div>
             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Severity Incident *</label>
             <select value={form.severityIncident} onChange={(e) => set("severityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
@@ -864,50 +838,53 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Suspect Area */}
         <FormField label="Suspect Area *" type="text" value={form.suspectArea} onChange={(v) => set("suspectArea", v)} placeholder="Area/sistem yang diduga menjadi penyebab" />
 
-        {/* Indicated Issue */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Indicated Issue *</label>
           <textarea value={form.indicatedIssue} onChange={(e) => set("indicatedIssue", e.target.value)} rows={4} placeholder="Jelaskan indikasi masalah / gejala incident yang terjadi..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 resize-none" />
         </div>
 
-        {/* Attachment */}
+        {/* Attachment — preview lokal, belum upload ke server */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:border-rose-300 transition-colors">
-            {attachment ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-600">
-                  <CheckCircle2 size={16} />
-                  <span className="text-[13px] font-medium">{attachment.name}</span>
+          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-colors">
+            {selectedFile ? (
+              <div className="space-y-3">
+                {previewUrl && (
+                  <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <Image size={16} />
+                    <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                    <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                  <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 transition-colors p-1">
+                    <X size={16} />
+                  </button>
                 </div>
-                <button onClick={() => setAttachment(null)} className="text-red-500 hover:text-red-700 transition-colors">
-                  <X size={16} />
-                </button>
               </div>
             ) : (
-              <label className="cursor-pointer">
-                <div className="flex flex-col items-center gap-2 text-slate-400">
-                  {uploading ? <Loader2 size={24} className="animate-spin" /> : <Upload size={24} />}
-                  <p className="text-[13px]">{uploading ? "Mengupload..." : "Klik untuk upload gambar atau screenshot"}</p>
+              <label className="cursor-pointer block text-center">
+                <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
+                  <Upload size={24} />
+                  <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
                   <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
                 </div>
-                <input type="file" className="hidden" accept="image/*" onChange={handleFile} disabled={uploading} />
+                <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
               </label>
             )}
           </div>
         </div>
 
-        {/* Submit */}
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleSubmit}
             disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-xl text-[13px] font-bold transition-colors"
           >
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Melaporkan...</> : <><Zap size={16} /> Laporkan Incident</>}
+            {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim...</> : <><Zap size={16} /> Laporkan Incident</>}
           </button>
           <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold transition-colors">
             Batal
@@ -920,13 +897,8 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
 
 // ─── Shared Components ────────────────────────────────────────────────────────
 
-function ModalWrapper({
-  title, onClose, icon, children,
-}: {
-  title: string;
-  onClose: () => void;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
+function ModalWrapper({ title, onClose, icon, children }: {
+  title: string; onClose: () => void; icon?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -946,35 +918,20 @@ function ModalWrapper({
   );
 }
 
-function FormField({
-  label, type, value, onChange, placeholder,
-}: {
-  label: string;
-  type: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
+function FormField({ label, type, value, onChange, placeholder }: {
+  label: string; type: string; value: string; onChange: (v: string) => void; placeholder?: string;
 }) {
   return (
     <div>
       <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
-      />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200" />
     </div>
   );
 }
 
-function StatCard({
-  label, value, icon, color,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
+function StatCard({ label, value, icon, color }: {
+  label: string; value: number; icon: React.ReactNode;
   color: "indigo" | "emerald" | "amber" | "slate" | "red" | "rose";
 }) {
   const colorMap = {
