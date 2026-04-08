@@ -134,7 +134,7 @@ services:
       JWT_SECRET:          ${JWT_SECRET:-28d1ea9e34b789c1925646b54837f6444d66d39b98bfd62921b1e0b31b348416}
       NEXTAUTH_URL:        ${NEXTAUTH_URL:-http://localhost:3001}
     volumes:
-      - ./uploads:/app/uploads   
+      - ./uploads:/app/public/uploads 
     networks:
       - sis-network
     depends_on:
