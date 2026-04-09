@@ -157,16 +157,16 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         {/* ── Stats Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard label="Total Tiket"  value={stats.total}         icon={<Ticket size={18} />}       color="indigo" />
-          <StatCard label="Open"         value={stats.openCount}     icon={<Activity size={18} />}     color="emerald" />
-          <StatCard label="Pending"      value={stats.pendingCount}  icon={<Clock size={18} />}        color="amber" />
-          <StatCard label="Done"         value={stats.doneCount}     icon={<CheckCircle2 size={18} />} color="slate" />
-          <StatCard label="Reject"       value={stats.rejectCount}   icon={<XCircle size={18} />}      color="red" />
-          <StatCard label="Incident"     value={stats.incidentCount} icon={<AlertCircle size={18} />}  color="rose" />
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="Total Tiket"  value={stats.total}         icon={<Ticket size={20} />}     color="indigo"  />
+          <StatCard label="Open"         value={stats.openCount}     icon={<Activity size={20} />}     color="emerald" />
+          {/* <StatCard label="Pending"      value={stats.pendingCount}  icon={<Clock size={20} />}        color="amber" /> */}
+          <StatCard label="Done"         value={stats.doneCount}     icon={<CheckCircle2 size={20} />} color="slate" />
+          {/* <StatCard label="Reject"       value={stats.rejectCount}   icon={<XCircle size={20} />}      color="red" /> */}
+          {/* <StatCard label="Incident"     value={stats.incidentCount} icon={<AlertCircle size={20} />}  color="rose" /> */}
         </div>
 
-        {/* ── Cek Status Tiket by ID ── */}
+        {/* ── Cek Status Tiket by ID ──
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
           <div className="flex items-center gap-2 mb-4">
             <FileText size={18} className="text-indigo-600" />
@@ -209,7 +209,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
               )}
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* ── Buat Tiket Baru ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
