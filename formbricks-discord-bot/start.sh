@@ -265,6 +265,10 @@ case "$COMMAND" in
       echo "Ngrok    : masih starting, cek: ./start.sh ngrok-url"
       echo "  atau cek logs: ./start.sh logs ngrok"
     fi
+    # Fix permissions untuk uploads folder
+    echo "Setting upload folder permissions..."
+    chmod -R 755 ./uploads
+    chown -R  1001:1001 ./uploads
 
     echo ""
     echo "================================================================"
