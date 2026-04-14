@@ -5,10 +5,14 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: {
     default: "Support & Incident Portal",
-    template: "%s | Support & Incident Portal",
+    template: "%s ",
   },
   description: "IT Support & Incident Management Portal — Internal System",
   robots: "noindex, nofollow",
+  icons: {
+    icon: "/logo-seamolec.ico",
+    apple: "/logo-seamolec.png",
+  },
 };
 
 export default function RootLayout({

@@ -22,13 +22,13 @@ interface Props {
 export default function TicketDetailSupport({
   ticket, title, requester, orgName, orgDepartment, createdAt, updatedAt,
 }: Props) {
-  const f         = ticket.form_fields;
-  const status    = ticket.status_pengusulan;
+  const f = ticket.form_fields;
+  const status = ticket.status_pengusulan;
   const assignees = Array.isArray(ticket.assignee) ? ticket.assignee : [];
 
   const summaryTicket = ticket.summary_ticket || "";
-  const rootCause     = ticket.root_cause     || "";
-  const timelineRaw   = ticket.timeline_tindak_lanjut || null;
+  const rootCause = ticket.root_cause || "";
+  const timelineRaw = ticket.timeline_tindak_lanjut || null;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -53,8 +53,8 @@ export default function TicketDetailSupport({
               <span className="text-white font-bold text-[14px]">#{ticket.id}</span>
             </div>
             <div className="ml-auto text-right hidden sm:block">
-              <p className="text-[11px] text-slate-400">{orgName}</p>
-              <p className="text-[11px] text-slate-500">{orgDepartment}</p>
+              <p className="text-[11px] text-white font-semibold">{orgName}</p>
+              <p className="text-[11px] text-white/80">{orgDepartment}</p>
             </div>
           </div>
         </div>
@@ -95,16 +95,16 @@ export default function TicketDetailSupport({
             <CardSection title="Data Formulir Support" icon={<FileSearch size={15} />}>
               <table className="w-full text-[13px]">
                 <tbody className="divide-y divide-slate-50">
-                  <FieldRow icon={<User size={13} />}      label="Reporter Information"        value={requester} />
-                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen"        value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                  <FieldRow icon={<Phone size={13} />}     label="No Telepon"                   value={f["No Telepon"] as string} />
-                  <FieldRow icon={<Mail size={13} />}      label="Email"                        value={f["Email"] as string} />
-                  <FieldRow icon={<Monitor size={13} />}   label="ID Device"                    value={f["ID Device"] as string} />
-                  <FieldRow icon={<MapPin size={13} />}    label="Ruangan / Lokasi"             value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
-                  <FieldRow icon={<Layers size={13} />}    label="Lantai"                       value={(f["Lantai"] || f["Floor"]) as string} />
-                  <FieldRow icon={<Calendar size={13} />}  label="Tanggal &amp; Waktu Pemohon"  value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
-                  <FieldRow icon={<Wrench size={13} />}    label="Type of Support Requested"    value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
-                  <FieldRow icon={<Package size={13} />}   label="Jumlah Barang"                value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
+                  <FieldRow icon={<User size={13} />} label="Reporter Information" value={requester} />
+                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen" value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
+                  <FieldRow icon={<Phone size={13} />} label="No Telepon" value={f["No Telepon"] as string} />
+                  <FieldRow icon={<Mail size={13} />} label="Email" value={f["Email"] as string} />
+                  <FieldRow icon={<Monitor size={13} />} label="ID Device" value={f["ID Device"] as string} />
+                  <FieldRow icon={<MapPin size={13} />} label="Ruangan / Lokasi" value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
+                  <FieldRow icon={<Layers size={13} />} label="Lantai" value={(f["Lantai"] || f["Floor"]) as string} />
+                  <FieldRow icon={<Calendar size={13} />} label="Tanggal &amp; Waktu Pemohon" value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
+                  <FieldRow icon={<Wrench size={13} />} label="Type of Support Requested" value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
+                  <FieldRow icon={<Package size={13} />} label="Jumlah Barang" value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
 
                   {/* ── Issue — style menggunakan td colspan, SAMA dengan IncidentFieldRowMultiline ── */}
                   {(f["Issue"] as string) && (
@@ -142,11 +142,10 @@ export default function TicketDetailSupport({
 
             {/* ── Root Cause ── */}
             <CardSection title="Root Cause" icon={<FileSearch size={15} />}>
-              <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${
-                rootCause
+              <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${rootCause
                   ? "bg-amber-50 border-amber-400 text-amber-800"
                   : "bg-slate-50 border-slate-300 text-slate-400 italic"
-              }`}>
+                }`}>
                 {rootCause || "Root cause belum diisi oleh petugas."}
               </div>
             </CardSection>

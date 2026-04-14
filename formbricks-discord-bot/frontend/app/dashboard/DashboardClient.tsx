@@ -40,23 +40,23 @@ interface Props {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  OPEN:        "bg-emerald-100 text-emerald-800 border border-emerald-300",
-  PENDING:     "bg-amber-100 text-amber-800 border border-amber-300",
-  DONE:        "bg-blue-100 text-blue-800 border border-blue-300",
-  REJECT:      "bg-red-100 text-red-800 border border-red-300",
+  OPEN: "bg-emerald-100 text-emerald-800 border border-emerald-300",
+  PENDING: "bg-amber-100 text-amber-800 border border-amber-300",
+  DONE: "bg-blue-100 text-blue-800 border border-blue-300",
+  REJECT: "bg-red-100 text-red-800 border border-red-300",
   INVESTIGASI: "bg-orange-100 text-orange-800 border border-orange-300",
-  MITIGASI:    "bg-purple-100 text-purple-800 border border-purple-300",
-  RESOLVED:    "bg-teal-100 text-teal-800 border border-teal-300",
+  MITIGASI: "bg-purple-100 text-purple-800 border border-purple-300",
+  RESOLVED: "bg-teal-100 text-teal-800 border border-teal-300",
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
   Critical: "bg-red-100 text-red-800 border border-red-300",
-  High:     "bg-orange-100 text-orange-800 border border-orange-300",
-  Medium:   "bg-amber-100 text-amber-800 border border-amber-300",
-  Low:      "bg-green-100 text-green-800 border border-green-300",
-  high:     "bg-orange-100 text-orange-800 border border-orange-300",
-  medium:   "bg-amber-100 text-amber-800 border border-amber-300",
-  low:      "bg-green-100 text-green-800 border border-green-300",
+  High: "bg-orange-100 text-orange-800 border border-orange-300",
+  Medium: "bg-amber-100 text-amber-800 border border-amber-300",
+  Low: "bg-green-100 text-green-800 border border-green-300",
+  high: "bg-orange-100 text-orange-800 border border-orange-300",
+  medium: "bg-amber-100 text-amber-800 border border-amber-300",
+  low: "bg-green-100 text-green-800 border border-green-300",
 };
 
 const FLOOR_OPTIONS = ["Lantai 1", "Lantai 2", "Lantai 3"];
@@ -78,7 +78,7 @@ const SEVERITY_OPTIONS = [
 async function uploadFileToServer(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res  = await fetch("/api/tickets/upload", { method: "POST", body: fd });
+  const res = await fetch("/api/tickets/upload", { method: "POST", body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Gagal upload file");
   return data.url as string;
@@ -87,13 +87,13 @@ async function uploadFileToServer(file: File): Promise<string> {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DashboardClient({ incidents, stats, orgName, orgDepartment }: Props) {
-  const [searchId,      setSearchId]      = useState("");
-  const [searchInput,   setSearchInput]   = useState("");
-  const [searchResult,  setSearchResult]  = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
+  const [searchId, setSearchId] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResult, setSearchResult] = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  const [modal,             setModal]             = useState<null | "support" | "incident">(null);
-  const [selectedIncident,  setSelectedIncident]  = useState<IncidentRow | null>(null);
+  const [modal, setModal] = useState<null | "support" | "incident">(null);
+  const [selectedIncident, setSelectedIncident] = useState<IncidentRow | null>(null);
 
   const handleRefresh = useCallback(() => window.location.reload(), []);
 
@@ -132,7 +132,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
   const isSearchMode = searchId !== "";
 
   return (
-    <div className="min-h-screen" style={{ background: "#f4f6f9" }}>
+    <div className="min-h-screen" style={{ background: "#ffffff81" }}>
 
       {/* ── Header ── */}
       <header
@@ -173,9 +173,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
 
         {/* ── Stats Cards ── */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Total Tiket" value={stats.total}      icon={<Ticket size={18} />}       color="indigo" sub="Support & Incident" />
-          <StatCard label="Open"        value={stats.openCount}  icon={<Activity size={18} />}     color="emerald" sub="On Progress" />
-          <StatCard label="Closed"      value={stats.closedCount} icon={<CheckCircle2 size={18} />} color="slate" sub="Done & Rejected" />
+          <StatCard label="Total Tiket" value={stats.total} icon={<Ticket size={18} />} color="indigo" sub="Support & Incident" />
+          <StatCard label="Open" value={stats.openCount} icon={<Activity size={18} />} color="emerald" sub="On Progress" />
+          <StatCard label="Closed" value={stats.closedCount} icon={<CheckCircle2 size={18} />} color="slate" sub="Done & Rejected" />
         </div>
 
         {/* ── Buat Tiket Baru ── */}
@@ -255,6 +255,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                   disabled={searchLoading}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-colors text-white whitespace-nowrap"
                   style={{ background: "#4f46e5" }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = "#4338ca")}
+                  onMouseOut={(e) => (e.currentTarget.style.background = "#4f46e5")}
                 >
                   {searchLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
                   Cari
@@ -264,6 +266,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                     onClick={handleClearSearch}
                     className="flex items-center gap-1 px-3 py-2 rounded-lg text-[11px] font-semibold transition-colors text-slate-600 whitespace-nowrap"
                     style={{ background: "#f1f3f5", border: "1px solid #e2e8f0" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#e2e8f0")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#f1f3f5")}
                   >
                     <X size={12} />
                     <span className="hidden sm:inline">Reset</span>
@@ -274,6 +278,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                     onClick={handleRefresh}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] text-slate-500 transition-colors"
                     style={{ background: "#f1f3f5", border: "1px solid #e2e8f0" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#e2e8f0")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#f1f3f5")}
                   >
                     <RefreshCw size={12} />
                     <span className="hidden sm:inline">Refresh</span>
@@ -353,8 +359,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                           style={{ borderBottom: idx < incidents.length - 1 ? "1px solid #f8f9fa" : "none" }}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-mono font-bold text-rose-500 text-[12px]">#{inc.id}</span>
-                          </td>
+                            <span className="font-mono font-bold text-[11px]" style={{ color: "#0f172a" }}>#{inc.id}</span>                     
+                                 </td>
                           <td className="px-4 py-3 max-w-[200px]">
                             <p className="font-semibold text-slate-800 truncate text-[12px]" title={inc.title}>{inc.title}</p>
                             <p className="text-[10px] text-slate-400 truncate mt-0.5" title={inc.suspect_area}>
@@ -381,7 +387,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                             <button
                               onClick={() => setSelectedIncident(inc)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-white transition-colors"
-                              style={{ background: "#e11d48" }}
+                              style={{ background: "#0f172a" }}
+                              onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
+                              onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
                             >
                               Detail <ChevronRight size={10} />
                             </button>
@@ -399,8 +407,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono font-bold text-rose-500 text-[11px]">#{inc.id}</span>
-                            <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${STATUS_COLORS[inc.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                            <span className="font-mono font-bold text-[11px]" style={{ color: "#0f172a" }}>#{inc.id}</span>                            <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${STATUS_COLORS[inc.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
                               {inc.status}
                             </span>
                           </div>
@@ -410,7 +417,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                         <button
                           onClick={() => setSelectedIncident(inc)}
                           className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-white"
-                          style={{ background: "#e11d48" }}
+                          style={{ background: "#0f172a" }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
+                          onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
                         >
                           Detail <ChevronRight size={10} />
                         </button>
@@ -435,9 +444,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
         </footer>
       </main>
 
-      {modal === "support"  && <SupportFormModal  onClose={() => setModal(null)} />}
+      {modal === "support" && <SupportFormModal onClose={() => setModal(null)} />}
       {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />}
-      {selectedIncident     && <IncidentDetailModal incident={selectedIncident} onClose={() => setSelectedIncident(null)} />}
+      {selectedIncident && <IncidentDetailModal incident={selectedIncident} onClose={() => setSelectedIncident(null)} />}
     </div>
   );
 }
@@ -446,30 +455,30 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
 
 function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
   const ff = (ticket.form_fields || ticket.formFields || {}) as Record<string, unknown>;
-  const status     = String(ticket.status || ticket.status_pengusulan || "OPEN");
-  const type       = String(ticket.type || "TICKETING");
+  const status = String(ticket.status || ticket.status_pengusulan || "OPEN");
+  const type = String(ticket.type || "TICKETING");
   const isIncident = type === "INCIDENT";
 
   const STATUS_LABELS: Record<string, string> = {
-    OPEN:        "Open",
-    PENDING:     "Pending",
-    DONE:        "Done",
-    REJECT:      "Reject",
+    OPEN: "Open",
+    PENDING: "Pending",
+    DONE: "Done",
+    REJECT: "Reject",
     IN_PROGRESS: "In Progress",
     INVESTIGASI: "Investigasi",
-    MITIGASI:    "Mitigasi",
-    RESOLVED:    "Resolved",
+    MITIGASI: "Mitigasi",
+    RESOLVED: "Resolved",
   };
 
   const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-    OPEN:        { bg: "#f0fdf4", text: "#166534", border: "#86efac", dot: "#22c55e" },
-    PENDING:     { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },
-    DONE:        { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },
-    REJECT:      { bg: "#fff5f5", text: "#991b1b", border: "#fca5a5", dot: "#ef4444" },
+    OPEN: { bg: "#f0fdf4", text: "#166534", border: "#86efac", dot: "#22c55e" },
+    PENDING: { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },
+    DONE: { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },
+    REJECT: { bg: "#fff5f5", text: "#991b1b", border: "#fca5a5", dot: "#ef4444" },
     IN_PROGRESS: { bg: "#f0f9ff", text: "#075985", border: "#7dd3fc", dot: "#0ea5e9" },
     INVESTIGASI: { bg: "#fff7ed", text: "#9a3412", border: "#fdba74", dot: "#f97316" },
-    MITIGASI:    { bg: "#faf5ff", text: "#6b21a8", border: "#c4b5fd", dot: "#8b5cf6" },
-    RESOLVED:    { bg: "#f0fdfa", text: "#134e4a", border: "#5eead4", dot: "#14b8a6" },
+    MITIGASI: { bg: "#faf5ff", text: "#6b21a8", border: "#c4b5fd", dot: "#8b5cf6" },
+    RESOLVED: { bg: "#f0fdfa", text: "#134e4a", border: "#5eead4", dot: "#14b8a6" },
   };
 
   const sd = STATUS_DISPLAY[status] || { bg: "#f8fafc", text: "#475569", border: "#cbd5e1", dot: "#94a3b8" };
@@ -488,7 +497,7 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
       <div className="p-4 sm:p-5" style={{ background: "#fafffe" }}>
         {/* Top row: ID, Type, Status */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 pb-4" style={{ borderBottom: "1px solid #e8f5e9" }}>
-          
+
           {/* ID */}
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID Tiket</span>
@@ -532,15 +541,15 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {!isIncident && (
             <>
-              <InfoItem label="Reporter"     value={String(ff["Reporter Information"] || ff["Name"] || "—")} />
-              <InfoItem label="Email"        value={String(ff["Email"] || "—")} />
+              <InfoItem label="Reporter" value={String(ff["Reporter Information"] || ff["Name"] || "—")} />
+              <InfoItem label="Email" value={String(ff["Email"] || "—")} />
               <InfoItem label="Type Support" value={String(ff["Type of Support Requested"] || "—")} />
             </>
           )}
           {isIncident && (
             <>
-              <InfoItem label="Priority"     value={String(ff["Priority Incident"] || "—")} />
-              <InfoItem label="Severity"     value={String(ff["Severity Incident"] || "—")} />
+              <InfoItem label="Priority" value={String(ff["Priority Incident"] || "—")} />
+              <InfoItem label="Severity" value={String(ff["Severity Incident"] || "—")} />
               <InfoItem label="Suspect Area" value={String(ff["Suspect Area"] || "—")} />
             </>
           )}
@@ -625,7 +634,7 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
           <Link
             href={`/tickets/${incident.id}`}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold text-white transition-colors"
-            style={{ background: "#e11d48" }}
+            style={{ background: "#0f172a" }}
           >
             Lihat Detail Lengkap <ChevronRight size={13} />
           </Link>
@@ -649,12 +658,12 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
-  const fileInputRef                     = useRef<HTMLInputElement>(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [success,    setSuccess]        = useState(false);
-  const [ticketId,   setTicketId]       = useState<number | null>(null);
-  const [error,      setError]          = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [ticketId, setTicketId] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -679,7 +688,7 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async () => {
     if (!form.reporterInfo || !form.division || !form.noTelepon || !form.email ||
-        !form.ruangan || !form.lantai || !form.typeOfSupport || !form.issue) {
+      !form.ruangan || !form.lantai || !form.typeOfSupport || !form.issue) {
       setError("Harap isi semua field yang wajib diisi (*)");
       return;
     }
@@ -691,21 +700,21 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
 
       const typeValue = form.typeOfSupport === "Other" ? (form.typeOther || "Other") : form.typeOfSupport;
       const formFields: Record<string, string> = {
-        "Reporter Information":      form.reporterInfo,
-        "Division":                  form.division,
-        "No Telepon":                form.noTelepon,
-        "Email":                     form.email,
-        "ID Device":                 form.idDevice,
-        "Ruangan":                   form.ruangan,
-        "Lantai":                    form.lantai,
-        "Tanggal & Waktu Pemohon":   form.tanggalWaktu,
+        "Reporter Information": form.reporterInfo,
+        "Division": form.division,
+        "No Telepon": form.noTelepon,
+        "Email": form.email,
+        "ID Device": form.idDevice,
+        "Ruangan": form.ruangan,
+        "Lantai": form.lantai,
+        "Tanggal & Waktu Pemohon": form.tanggalWaktu,
         "Type of Support Requested": typeValue,
-        "Issue":                     form.issue,
-        "Jumlah Barang":             form.jumlahBarang,
+        "Issue": form.issue,
+        "Jumlah Barang": form.jumlahBarang,
       };
       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
-      const res  = await fetch("/api/tickets/create", {
+      const res = await fetch("/api/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "TICKETING", formFields, createdBy: form.reporterInfo }),
@@ -750,12 +759,12 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
       <div className="space-y-3.5">
         {error && <div className="rounded-lg px-4 py-3 text-[12px] font-medium text-red-700" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>{error}</div>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <FormField label="Reporter Information *" type="text"  value={form.reporterInfo} onChange={(v) => set("reporterInfo", v)} placeholder="Nama lengkap Anda" />
-          <FormField label="Division *"             type="text"  value={form.division}     onChange={(v) => set("division", v)}     placeholder="Divisi / Departemen" />
-          <FormField label="No Telepon *"           type="tel"   value={form.noTelepon}    onChange={(v) => set("noTelepon", v)}    placeholder="08xx-xxxx-xxxx" />
-          <FormField label="Email *"                type="email" value={form.email}        onChange={(v) => set("email", v)}        placeholder="email@perusahaan.com" />
-          <FormField label="ID Device"              type="text"  value={form.idDevice}     onChange={(v) => set("idDevice", v)}     placeholder="Serial number / asset tag" />
-          <FormField label="Ruangan *"              type="text"  value={form.ruangan}      onChange={(v) => set("ruangan", v)}      placeholder="Nama ruangan" />
+          <FormField label="Reporter Information *" type="text" value={form.reporterInfo} onChange={(v) => set("reporterInfo", v)} placeholder="Nama lengkap Anda" />
+          <FormField label="Division *" type="text" value={form.division} onChange={(v) => set("division", v)} placeholder="Divisi / Departemen" />
+          <FormField label="No Telepon *" type="tel" value={form.noTelepon} onChange={(v) => set("noTelepon", v)} placeholder="08xx-xxxx-xxxx" />
+          <FormField label="Email *" type="email" value={form.email} onChange={(v) => set("email", v)} placeholder="email@perusahaan.com" />
+          <FormField label="ID Device" type="text" value={form.idDevice} onChange={(v) => set("idDevice", v)} placeholder="Serial number / asset tag" />
+          <FormField label="Ruangan *" type="text" value={form.ruangan} onChange={(v) => set("ruangan", v)} placeholder="Nama ruangan" />
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Lantai *</label>
@@ -838,12 +847,12 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
-  const fileInputRef                     = useRef<HTMLInputElement>(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [success,    setSuccess]        = useState(false);
-  const [ticketId,   setTicketId]       = useState<number | null>(null);
-  const [error,      setError]          = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [ticketId, setTicketId] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -868,7 +877,7 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async () => {
     if (!form.incidentTitle || !form.priorityIncident || !form.severityIncident ||
-        !form.suspectArea || !form.indicatedIssue) {
+      !form.suspectArea || !form.indicatedIssue) {
       setError("Harap isi semua field yang wajib diisi (*)");
       return;
     }
@@ -879,17 +888,17 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
       if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
 
       const formFields: Record<string, string> = {
-        "Incident Title":       form.incidentTitle,
+        "Incident Title": form.incidentTitle,
         "Incident Information": form.incidentTitle,
         "Date & Time Incident": form.dateTimeIncident,
-        "Priority Incident":    form.priorityIncident,
-        "Severity Incident":    form.severityIncident,
-        "Suspect Area":         form.suspectArea,
-        "Indicated Issue":      form.indicatedIssue,
+        "Priority Incident": form.priorityIncident,
+        "Severity Incident": form.severityIncident,
+        "Suspect Area": form.suspectArea,
+        "Indicated Issue": form.indicatedIssue,
       };
       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
-      const res  = await fetch("/api/tickets/create", {
+      const res = await fetch("/api/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "INCIDENT", formFields, createdBy: "static_portal" }),
@@ -1044,7 +1053,7 @@ function StatCard({ label, value, icon, color, sub }: {
   color: "indigo" | "emerald" | "slate"; sub?: string;
 }) {
   const colorMap = {
-    indigo:  {
+    indigo: {
       bg: "#ffffff",
       iconBg: "#eef2ff",
       iconColor: "#4f46e5",

@@ -37,7 +37,7 @@ export default async function DashboardPage() {
     <DashboardClient
       incidents={incidentData}
       stats={stats}
-      orgName={process.env.ORG_NAME || "IT Support Division"}
+      orgName={process.env.ORG_NAME || "SEAMOLEC"}
       orgDepartment={process.env.ORG_DEPARTMENT || "IT Infrastructure"}
     />
   );

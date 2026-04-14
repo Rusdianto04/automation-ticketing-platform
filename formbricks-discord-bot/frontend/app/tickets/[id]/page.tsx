@@ -27,8 +27,8 @@ export default async function TicketDetailPage({ params }: Props) {
   const ticket = await getTicketById(id);
   if (!ticket) notFound();
 
-  const orgName       = process.env.ORG_NAME       || "IT Support Division";
-  const orgDepartment = process.env.ORG_DEPARTMENT || "IT Infrastructure";
+  const orgName       = process.env.ORG_NAME       || "SEAMOLEC";
+  const orgDepartment = process.env.ORG_DEPARTMENT || "IT DEPARTMENT";
 
   const commonProps = {
     ticket,

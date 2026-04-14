@@ -21,38 +21,38 @@ interface Props {
 
 const PRIORITY_COLORS: Record<string, string> = {
   Critical: "bg-red-100 text-red-800 border-red-300",
-  High:     "bg-orange-100 text-orange-800 border-orange-300",
-  Medium:   "bg-amber-100 text-amber-800 border-amber-300",
-  Low:      "bg-green-100 text-green-800 border-green-300",
-  high:     "bg-orange-100 text-orange-800 border-orange-300",
-  medium:   "bg-amber-100 text-amber-800 border-amber-300",
-  low:      "bg-green-100 text-green-800 border-green-300",
+  High: "bg-orange-100 text-orange-800 border-orange-300",
+  Medium: "bg-amber-100 text-amber-800 border-amber-300",
+  Low: "bg-green-100 text-green-800 border-green-300",
+  high: "bg-orange-100 text-orange-800 border-orange-300",
+  medium: "bg-amber-100 text-amber-800 border-amber-300",
+  low: "bg-green-100 text-green-800 border-green-300",
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
   "SEV 1: Critical": "bg-red-100 text-red-800 border-red-300",
-  "SEV 2: High":     "bg-orange-100 text-orange-800 border-orange-300",
-  "SEV 3: Medium":   "bg-amber-100 text-amber-800 border-amber-300",
-  "SEV 4: Low":      "bg-green-100 text-green-800 border-green-300",
+  "SEV 2: High": "bg-orange-100 text-orange-800 border-orange-300",
+  "SEV 3: Medium": "bg-amber-100 text-amber-800 border-amber-300",
+  "SEV 4: Low": "bg-green-100 text-green-800 border-green-300",
 };
 
 export default function TicketDetailIncident({
   ticket, title, orgName, orgDepartment, createdAt, updatedAt,
 }: Props) {
-  const f         = ticket.form_fields;
-  const status    = ticket.status_pengusulan;
+  const f = ticket.form_fields;
+  const status = ticket.status_pengusulan;
   const assignees = Array.isArray(ticket.assignee) ? ticket.assignee : [];
 
-  const summaryTicket  = ticket.summary_ticket || "";
-  const rootCause      = ticket.root_cause     || "";
-  const timelineRaw    = ticket.timeline_action_taken || ticket.timeline_tindak_lanjut || null;
+  const summaryTicket = ticket.summary_ticket || "";
+  const rootCause = ticket.root_cause || "";
+  const timelineRaw = ticket.timeline_action_taken || ticket.timeline_tindak_lanjut || null;
 
-  const priority       = (f["Priority Incident"]   as string) || "";
-  const severity       = (f["Severity Incident"]   as string) || "";
-  const suspectArea    = (f["Suspect Area"]         as string) || "";
-  const indicatedIssue = (f["Indicated Issue"]      as string) || (f["Issue"] as string) || "";
-  const dateTime       = (f["Date & Time Incident"] as string) || (f["Date Incident"] as string) || "";
-  const incidentTitle  = (f["Incident Title"]       as string) || (f["Incident Information"] as string) || title;
+  const priority = (f["Priority Incident"] as string) || "";
+  const severity = (f["Severity Incident"] as string) || "";
+  const suspectArea = (f["Suspect Area"] as string) || "";
+  const indicatedIssue = (f["Indicated Issue"] as string) || (f["Issue"] as string) || "";
+  const dateTime = (f["Date & Time Incident"] as string) || (f["Date Incident"] as string) || "";
+  const incidentTitle = (f["Incident Title"] as string) || (f["Incident Information"] as string) || title;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -77,8 +77,8 @@ export default function TicketDetailIncident({
               <span className="text-white font-bold text-[14px]">#{ticket.id}</span>
             </div>
             <div className="ml-auto text-right hidden sm:block">
-              <p className="text-[11px] text-slate-400">{orgName}</p>
-              <p className="text-[11px] text-slate-500">{orgDepartment}</p>
+              <p className="text-[11px] text-white font-semibold">{orgName}</p>
+              <p className="text-[11px] text-white/80">{orgDepartment}</p>
             </div>
           </div>
         </div>
@@ -230,11 +230,10 @@ export default function TicketDetailIncident({
 
             {/* ── Root Cause ── */}
             <CardSection title="Root Cause Analysis" icon={<FileSearch size={15} />} accent="rose">
-              <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${
-                rootCause
+              <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${rootCause
                   ? "bg-amber-50 border-amber-500 text-amber-900"
                   : "bg-slate-50 border-slate-300 text-slate-400 italic"
-              }`}>
+                }`}>
                 {rootCause || "Root cause analysis belum diselesaikan oleh tim investigasi."}
               </div>
             </CardSection>
