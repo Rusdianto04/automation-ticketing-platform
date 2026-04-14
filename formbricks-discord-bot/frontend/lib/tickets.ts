@@ -80,33 +80,30 @@ export async function getTicketById(id: number): Promise<Ticket | null> {
 }
 
 export async function getTicketStats() {
-  const now = new Date();
-  const todayWIB = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCHours() >= 17 ? now.getUTCDate() : now.getUTCDate() - 1,
-      17, 0, 0, 0
-    )
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const p = prisma as any;
+  // Total semua ticket (support + incident)
+  // Open  = semua ticket yang belum selesai (OPEN, PENDING, INVESTIGASI, MITIGASI, APPROVED, IN_PROGRESS)
+  // Closed = semua ticket yang sudah selesai (DONE, RESOLVED, REJECT, REJECTED)
+  const [total, openCount, closedCount] = await Promise.all([
+    p.ticket.count(),
+    p.ticket.count({
+      where: {
+        status_pengusulan: {
+          in: ["OPEN", "PENDING", "INVESTIGASI", "MITIGASI", "APPROVED", "IN_PROGRESS"],
+        },
+      },
+    }),
+    p.ticket.count({
+      where: {
+        status_pengusulan: {
+          in: ["DONE", "RESOLVED", "REJECT", "REJECTED"],
+        },
+      },
+    }),
+  ]);
 
-  const [total, todayTotal, openCount, pendingCount, doneCount, incidentCount, rejectCount] =
-    await Promise.all([
-      p.ticket.count(),
-      p.ticket.count({ where: { created_at: { gte: todayWIB } } }),
-      p.ticket.count({ where: { status_pengusulan: "OPEN" } }),
-      p.ticket.count({ where: { status_pengusulan: "PENDING" } }),
-      p.ticket.count({ where: { status_pengusulan: { in: ["DONE", "RESOLVED"] } } }),
-      p.ticket.count({ where: { type: "INCIDENT" } }),
-      p.ticket.count({ where: { status_pengusulan: { in: ["REJECT", "REJECTED"] } } }),
-    ]);
-
-  return { total, todayTotal, openCount, pendingCount, doneCount, incidentCount, rejectCount };
+  return { total, openCount, closedCount };
 }
-
 export async function updateTicketStatus(id: number, status: TicketStatus, note?: string) {
   const isResolved = status === "DONE" || status === "RESOLVED";
   const isReopened = status === "OPEN" || status === "INVESTIGASI" || status === "MITIGASI" || status === "PENDING";
