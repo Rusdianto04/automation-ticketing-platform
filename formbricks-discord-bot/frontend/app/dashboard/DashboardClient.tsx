@@ -132,8 +132,12 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
   const isSearchMode = searchId !== "";
 
   return (
-    <div className="min-h-screen" style={{ background: "#ffffff81" }}>
-
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundColor: "#d9e1f2",
+      }}
+    >
       {/* ── Header ── */}
       <header
         className="text-white sticky top-0 z-30"
@@ -160,7 +164,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
             <Link
               href="/admin/login"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] transition-all"
-              style={{ color: "rgba(148,163,184,0.9)", border: "1px solid rgba(255,255,255,0.08)" }}
+              style={{ color: "rgba(255, 255, 255, 0.9)", border: "1px solid rgba(255, 255, 255, 0.9)" }}
             >
               <Settings size={13} />
               <span className="hidden sm:inline font-medium">Admin Panel</span>
@@ -175,7 +179,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
         <div className="grid grid-cols-3 gap-3">
           <StatCard label="Total Tiket" value={stats.total} icon={<Ticket size={18} />} color="indigo" sub="Support & Incident" />
           <StatCard label="Open" value={stats.openCount} icon={<Activity size={18} />} color="emerald" sub="On Progress" />
-          <StatCard label="Closed" value={stats.closedCount} icon={<CheckCircle2 size={18} />} color="slate" sub="Done & Rejected" />
+          <StatCard label="Closed" value={stats.closedCount} icon={<CheckCircle2 size={18} />} color="rose" sub="Done & Rejected" />
         </div>
 
         {/* ── Buat Tiket Baru ── */}
@@ -211,7 +215,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
         <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8eaed" }}>
 
           {/* Header Card */}
-          <div className="px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid #f1f3f5", background: "#fafbfc" }}>
+          <div className="px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid #f1f3f5", background: "#1e293b" }}>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
 
               {/* Judul */}
@@ -228,7 +232,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                     <div className="w-6 h-6 rounded-md bg-rose-100 flex items-center justify-center">
                       <AlertCircle size={13} className="text-rose-600" />
                     </div>
-                    <h2 className="text-[13px] font-bold text-slate-800">Incident Aktif &amp; Terkini</h2>
+                    <h2 className="text-[13px] font-bold text-white">Incident Aktif &amp; Terkini</h2>
                     <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
                       {incidents.length}
                     </span>
@@ -289,10 +293,10 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
             </div>
 
             {!isSearchMode && (
-              <p className="text-[11px] text-slate-400 mt-2">
+              <p className="text-[11px] text-white mt-2">
                 Masukkan nomor ID tiket untuk cek status. Contoh:{" "}
-                <span className="font-mono font-semibold text-slate-500">99</span> atau{" "}
-                <span className="font-mono font-semibold text-slate-500">#99</span>
+                <span className="font-mono font-semibold text-white">99</span> atau{" "}
+                <span className="font-mono font-semibold text-white">#99</span>
               </p>
             )}
           </div>
@@ -342,12 +346,12 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr style={{ borderBottom: "1px solid #f1f3f5", background: "#fafbfc" }}>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-14">ID</th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Judul Incident</th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24">Priority</th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28">Severity</th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28">Status</th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">Tanggal</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider w-14">ID</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider">Judul Incident</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider w-24">Priority</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider w-28">Severity</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider w-28">Status</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold text-dark-400 uppercase tracking-wider w-32">Tanggal</th>
                         <th className="px-4 py-2.5 w-20"></th>
                       </tr>
                     </thead>
@@ -359,8 +363,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                           style={{ borderBottom: idx < incidents.length - 1 ? "1px solid #f8f9fa" : "none" }}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-mono font-bold text-[11px]" style={{ color: "#0f172a" }}>#{inc.id}</span>                     
-                                 </td>
+                            <span className="font-mono font-bold text-[11px]" style={{ color: "#1e293b" }}>#{inc.id}</span>
+                          </td>
                           <td className="px-4 py-3 max-w-[200px]">
                             <p className="font-semibold text-slate-800 truncate text-[12px]" title={inc.title}>{inc.title}</p>
                             <p className="text-[10px] text-slate-400 truncate mt-0.5" title={inc.suspect_area}>
@@ -387,9 +391,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                             <button
                               onClick={() => setSelectedIncident(inc)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-white transition-colors"
-                              style={{ background: "#0f172a" }}
+                              style={{ background: "#1e293b" }}
                               onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-                              onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
+                              onMouseOut={(e) => (e.currentTarget.style.background = "#1e293b")}
                             >
                               Detail <ChevronRight size={10} />
                             </button>
@@ -407,7 +411,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono font-bold text-[11px]" style={{ color: "#0f172a" }}>#{inc.id}</span>                            <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${STATUS_COLORS[inc.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                            <span className="font-mono font-bold text-[11px]" style={{ color: "#1e293b" }}>#{inc.id}</span>
+                            <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${STATUS_COLORS[inc.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
                               {inc.status}
                             </span>
                           </div>
@@ -417,9 +422,9 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                         <button
                           onClick={() => setSelectedIncident(inc)}
                           className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-white"
-                          style={{ background: "#0f172a" }}
+                          style={{ background: "#1e293b" }}
                           onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-                          onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
+                          onMouseOut={(e) => (e.currentTarget.style.background = "#1e293b")}
                         >
                           Detail <ChevronRight size={10} />
                         </button>
@@ -439,7 +444,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
           )}
         </div>
 
-        <footer className="text-center text-[10px] text-slate-400 py-3">
+        <footer className="text-center text-[10px] text-dark py-3">
           {orgName} — {orgDepartment} · Support &amp; Incident Management Portal
         </footer>
       </main>
@@ -1006,6 +1011,7 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </ModalWrapper>
+
   );
 }
 
@@ -1029,6 +1035,7 @@ function ModalWrapper({ title, onClose, icon, children }: {
         <div className="px-5 py-4">{children}</div>
       </div>
     </div>
+
   );
 }
 
@@ -1045,12 +1052,13 @@ function FormField({ label, type, value, onChange, placeholder }: {
         style={{ border: "1px solid #d1d5db" }}
       />
     </div>
+
   );
 }
 
 function StatCard({ label, value, icon, color, sub }: {
   label: string; value: number; icon: React.ReactNode;
-  color: "indigo" | "emerald" | "slate"; sub?: string;
+  color: "indigo" | "emerald" | "slate" | "rose" | "dark"; sub?: string;
 }) {
   const colorMap = {
     indigo: {
@@ -1074,6 +1082,20 @@ function StatCard({ label, value, icon, color, sub }: {
       valColor: "#334155",
       accent: "#94a3b8",
     },
+    rose: {
+      bg: "#ffffff",
+      iconBg: "#fff1f2",
+      iconColor: "#e11d48",
+      valColor: "#9f1239",
+      accent: "#e11d48",
+    },
+    dark: {
+      bg: "#0f172a",
+      iconBg: "#1e293b",
+      iconColor: "#e2e8f0",
+      valColor: "#f8fafc",
+      accent: "#38bdf8", // biar ada highlight
+    }
   }[color];
 
   return (
@@ -1093,5 +1115,6 @@ function StatCard({ label, value, icon, color, sub }: {
         {sub && <p className="text-[9px] sm:text-[10px] text-slate-400 leading-tight truncate">{sub}</p>}
       </div>
     </div>
+
   );
 }
