@@ -133,7 +133,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen flex flex-col"
       style={{
         backgroundColor: "#d9e1f2",
       }}
@@ -165,6 +165,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
               href="/admin/login"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] transition-all"
               style={{ color: "rgba(255, 255, 255, 0.9)", border: "1px solid rgba(255, 255, 255, 0.9)" }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = "rgba(212, 212, 212, 0.9)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)")}
             >
               <Settings size={13} />
               <span className="hidden sm:inline font-medium">Admin Panel</span>
@@ -173,7 +175,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-4">
+      <main className="flex-1 max-w-screen-xl mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-4 w-full">
 
         {/* ── Stats Cards ── */}
         <div className="grid grid-cols-3 gap-3">
@@ -196,6 +198,8 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
               onClick={() => setModal("support")}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold transition-all text-white"
               style={{ background: "linear-gradient(135deg, #4f46e5, #6366f1)", boxShadow: "0 1px 3px rgba(79,70,229,0.3)" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4338ca")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#4f46e5")}
             >
               <Ticket size={14} />
               Buat Tiket Support
@@ -204,7 +208,10 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
               onClick={() => setModal("incident")}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold transition-all text-white"
               style={{ background: "linear-gradient(135deg, #e11d48, #f43f5e)", boxShadow: "0 1px 3px rgba(225,29,72,0.3)" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#bb1e40")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#e11d48")}
             >
+
               <Zap size={14} />
               Laporkan Incident
             </button>
@@ -443,16 +450,35 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
             )
           )}
         </div>
-
-        <footer className="text-center text-[10px] text-dark py-3">
-          {orgName} — {orgDepartment} · Support &amp; Incident Management Portal
-        </footer>
       </main>
+
+      <footer className="w-full bg-[#0f172a] text-white border-t border-white/10 mt-12">
+        <div className="w-full px-4 py-2 text-center space-y-1">
+
+          <p className="text-[15px] text-white/70">
+            Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
+          </p>
+
+          <div className="flex justify-center flex-wrap gap-2 text-[14px] text-white/60">
+            <a href="#" className="hover:text-white transition-colors">Legal</a>
+            <span>|</span>
+            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <span>|</span>
+            <a href="#" className="hover:text-white transition-colors">Security</a>
+            <span>|</span>
+            <a href="#" className="hover:text-white transition-colors">Accessibility</a>
+            <span>|</span>
+            <a href="#" className="hover:text-white transition-colors">Cookies</a>
+          </div>
+
+        </div>
+      </footer>
 
       {modal === "support" && <SupportFormModal onClose={() => setModal(null)} />}
       {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />}
       {selectedIncident && <IncidentDetailModal incident={selectedIncident} onClose={() => setSelectedIncident(null)} />}
     </div>
+
   );
 }
 
@@ -566,7 +592,9 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
         <Link
           href={`/tickets/${String(ticket.id)}`}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold text-white transition-colors"
-          style={{ background: "#059669" }}
+          style={{ background: "#0f172a" }}
+                      onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
+            onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
         >
           Lihat Detail Lengkap <ChevronRight size={12} />
         </Link>
@@ -640,6 +668,8 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
             href={`/tickets/${incident.id}`}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold text-white transition-colors"
             style={{ background: "#0f172a" }}
+            onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
+            onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
           >
             Lihat Detail Lengkap <ChevronRight size={13} />
           </Link>
@@ -779,9 +809,9 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
           </select>
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Tanggal &amp; Waktu Pemohon</label>
+          {/* <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Tanggal &amp; Waktu Pemohon</label>
           <input type="text" value={form.tanggalWaktu} readOnly className="w-full px-3 py-2.5 rounded-lg text-[12px] text-slate-500 cursor-not-allowed" style={{ border: "1px solid #e2e8f0", background: "#f8fafc" }} />
-          <p className="text-[10px] text-slate-400 mt-1">Terisi otomatis dari sistem</p>
+          <p className="text-[10px] text-slate-400 mt-1">Terisi otomatis dari sistem</p> */}
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Type of Support Requested *</label>
@@ -828,10 +858,19 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2 pt-1">
           <button onClick={handleSubmit} disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-bold text-white transition-colors"
-            style={{ background: submitting ? "#818cf8" : "#4f46e5" }}>
+            style={{ background: submitting ? "#818cf8" : "#4f46e5" }}
+            onMouseOver={(e) => (e.currentTarget.style.background = "#4338ca")}
+            onMouseOut={(e) => (e.currentTarget.style.background = "#4f46e5")}
+          >
             {submitting ? <><Loader2 size={14} className="animate-spin" /> Mengirim Tiket...</> : <><Ticket size={14} /> Kirim Tiket Support</>}
           </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-[12px] font-semibold text-slate-600 transition-colors" style={{ border: "1px solid #e2e8f0" }}>Batal</button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl text-[12px] font-semibold text-slate-600 border border-slate-200 transition-all hover:bg-slate-100 hover:text-slate-800"
+          >
+            Batal
+          </button>
+
         </div>
       </div>
     </ModalWrapper>
@@ -949,9 +988,9 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
         {error && <div className="rounded-lg px-4 py-3 text-[12px] font-medium text-red-700" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>{error}</div>}
         <FormField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident yang terjadi" />
         <div>
-          <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Date &amp; Time Incident</label>
+          {/* <label className="block text-[11px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Date &amp; Time Incident</label>
           <input type="text" value={form.dateTimeIncident} readOnly className="w-full px-3 py-2.5 rounded-lg text-[12px] text-slate-500 cursor-not-allowed" style={{ border: "1px solid #e2e8f0", background: "#f8fafc" }} />
-          <p className="text-[10px] text-slate-400 mt-1">Terisi otomatis dari sistem</p>
+          <p className="text-[10px] text-slate-400 mt-1">Terisi otomatis dari sistem</p> */}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -1004,11 +1043,19 @@ function IncidentFormModal({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2 pt-1">
           <button onClick={handleSubmit} disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-bold text-white transition-colors"
-            style={{ background: submitting ? "#fb7185" : "#e11d48" }}>
+            style={{ background: submitting ? "#fb7185" : "#e11d48" }}
+            onMouseOver={(e) => (e.currentTarget.style.background = "#bb1e40")}
+            onMouseOut={(e) => (e.currentTarget.style.background = "#e11d48")}
+
+          >
             {submitting ? <><Loader2 size={14} className="animate-spin" /> Mengirim...</> : <><Zap size={14} /> Laporkan Incident</>}
           </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-[12px] font-semibold text-slate-600" style={{ border: "1px solid #e2e8f0" }}>Batal</button>
-        </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl text-[12px] font-semibold text-slate-600 border border-slate-200 transition-all hover:bg-slate-100 hover:text-slate-800"
+          >
+            Batal
+          </button>        </div>
       </div>
     </ModalWrapper>
 
