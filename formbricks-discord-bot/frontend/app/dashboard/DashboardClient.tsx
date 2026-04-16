@@ -163,10 +163,10 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
             </div>
             <Link
               href="/admin/login"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] transition-all"
-              style={{ color: "rgba(255, 255, 255, 0.9)", border: "1px solid rgba(255, 255, 255, 0.9)" }}
-                            onMouseOver={(e) => (e.currentTarget.style.background = "rgba(212, 212, 212, 0.9)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px]
+           text-white border border-white/70
+           transition-all duration-200
+           hover:bg-white/10 hover:border-white hover:shadow-sm"
             >
               <Settings size={13} />
               <span className="hidden sm:inline font-medium">Admin Panel</span>
@@ -593,8 +593,8 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
           href={`/tickets/${String(ticket.id)}`}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold text-white transition-colors"
           style={{ background: "#0f172a" }}
-                      onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-            onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
         >
           Lihat Detail Lengkap <ChevronRight size={12} />
         </Link>

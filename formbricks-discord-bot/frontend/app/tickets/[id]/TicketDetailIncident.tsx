@@ -55,12 +55,12 @@ export default function TicketDetailIncident({
   const incidentTitle = (f["Incident Title"] as string) || (f["Incident Information"] as string) || title;
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen" style={{ background: "#d9e1f2" }}>
 
       {/* ── Header ── */}
       <header
         className="text-white shadow-lg"
-        style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #4c0519 100%)" }}
+        style={{ background: "#1e293b" }}
       >
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 h-16">
@@ -86,26 +86,33 @@ export default function TicketDetailIncident({
 
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        {/* ── Alert Banner ── */}
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-5 flex items-start gap-3">
-          <AlertTriangle size={20} className="text-rose-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-[13px] font-bold text-rose-800">Incident Report</p>
-            <p className="text-[12px] text-rose-600 mt-0.5">
-              Ticket ini merupakan laporan insiden yang memerlukan penanganan dan eskalasi sesuai prosedur.
-            </p>
-          </div>
-        </div>
-
         {/* ── Title Bar ── */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-5 flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
+
+              <div className="relative group cursor-pointer">
+                <AlertTriangle size={14} className="text-rose-500" />
+
+                {/* Tooltip */}
+                <div className="absolute left-0 top-5 w-64 bg-white border border-rose-200 text-[11px] text-slate-600 rounded-lg shadow-lg p-3 
+                    opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 
+                    transition-all duration-200 pointer-events-none z-20">
+                  <p className="font-semibold text-rose-700 mb-1">Incident Report</p>
+                  <p>
+                    Ticket ini merupakan laporan insiden yang memerlukan penanganan dan eskalasi sesuai prosedur.
+                  </p>
+                </div>
+              </div>
+
+              {/* ID Ticket */}
               <span className="text-[11px] font-bold font-mono text-rose-500 bg-rose-50 px-2 py-0.5 rounded">
                 #{ticket.id}
               </span>
+
               <TypeBadge type={ticket.type} />
               <StatusBadge status={status} />
+
               {priority && (
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${PRIORITY_COLORS[priority] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                   {priority}
@@ -131,10 +138,10 @@ export default function TicketDetailIncident({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
+        <div className="max-w-screen-xl mx-auto space-y-5">
           {/* ── LEFT ── */}
-          <div className="lg:col-span-2 space-y-5">
+
+          <div className="space-y-5">
 
             {/* ── Data Formulir Incident — Indicated Issue masuk tabel ── */}
             <CardSection title="Data Formulir Incident" icon={<FileSearch size={15} />} accent="rose">
@@ -153,9 +160,9 @@ export default function TicketDetailIncident({
                     </tr>
                   )}
 
-                  {dateTime && (
+                  {/* {dateTime && (
                     <IncidentFieldRow icon={<Clock size={13} />} label="Date &amp; Time Incident" value={dateTime} />
-                  )}
+                  )} */}
 
                   {priority && (
                     <tr className="hover:bg-slate-50">
@@ -208,7 +215,46 @@ export default function TicketDetailIncident({
                         </p>
                       </td>
                     </tr>
+
                   )}
+
+                  {/* ── Assigne Petugas ── */}
+                  <tr className="hover:bg-slate-50">
+                    <th className="px-4 py-2.5 text-left align-top w-2/5 bg-slate-50/60">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-0.5">
+                        <span className="text-rose-400">
+                          <User size={13} />
+                        </span>
+                        Assignee / Petugas
+                      </div>
+                    </th>
+                    <td className="px-4 py-3">
+                      {assignees.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {assignees.map((a, i) => {
+                            const label =
+                              typeof a === "string"
+                                ? a
+                                : a?.name || a?.username || "Unknown";
+
+                            return (
+                              <span
+                                key={i}
+                                className="px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] rounded-full font-medium"
+                              >
+                                {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic text-[12px]">
+                          Belum ada petugas ditugaskan
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+
 
                 </tbody>
               </table>
@@ -231,8 +277,8 @@ export default function TicketDetailIncident({
             {/* ── Root Cause ── */}
             <CardSection title="Root Cause Analysis" icon={<FileSearch size={15} />} accent="rose">
               <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${rootCause
-                  ? "bg-amber-50 border-amber-500 text-amber-900"
-                  : "bg-slate-50 border-slate-300 text-slate-400 italic"
+                ? "bg-amber-50 border-amber-500 text-amber-900"
+                : "bg-slate-50 border-slate-300 text-slate-400 italic"
                 }`}>
                 {rootCause || "Root cause analysis belum diselesaikan oleh tim investigasi."}
               </div>
@@ -245,56 +291,7 @@ export default function TicketDetailIncident({
 
           </div>
 
-          {/* ── RIGHT ── */}
-          <div className="space-y-5">
 
-            <CardSection title="Informasi Ticket" icon={<Hash size={15} />}>
-              <dl className="px-4 py-3 space-y-3 text-[13px]">
-                <InfoItem
-                  label="ID Ticket"
-                  value={<span className="font-mono font-bold text-rose-600">#{ticket.id}</span>}
-                />
-                <InfoItem label="Status" value={<StatusBadge status={status} />} />
-                <InfoItem
-                  label="Type"
-                  value={<span className="font-medium text-slate-700">Incident</span>}
-                />
-                {priority && (
-                  <InfoItem
-                    label="Priority"
-                    value={
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${PRIORITY_COLORS[priority] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                        {priority}
-                      </span>
-                    }
-                  />
-                )}
-                {severity && (
-                  <InfoItem
-                    label="Severity"
-                    value={<span className="text-[12px] font-semibold text-slate-700">{severity}</span>}
-                  />
-                )}
-                {suspectArea && (
-                  <InfoItem
-                    label="Suspect Area"
-                    value={<span className="text-[12px] text-slate-600 text-right">{suspectArea}</span>}
-                  />
-                )}
-                {dateTime && (
-                  <InfoItem
-                    label="Tgl Incident"
-                    value={<span className="text-[11px] text-slate-600">{dateTime}</span>}
-                  />
-                )}
-              </dl>
-            </CardSection>
-
-            <CardSection title="Assignee / Petugas" icon={<User size={15} />}>
-              <AssigneeList assignees={assignees} />
-            </CardSection>
-
-          </div>
         </div>
       </main>
     </div>
