@@ -1,14 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Ticket,
-  BarChart3, Shield, LogOut, ChevronRight,
+  BarChart3, Shield, LogOut, ChevronRight, Menu, X,
 } from "lucide-react";
 import { logoutAdminAction } from "@/app/admin/actions";
 
-// Automation Log DIHAPUS dari menu
 const NAV_ITEMS = [
   { href: "/admin",         label: "Dashboard",           icon: LayoutDashboard },
   { href: "/admin/tickets", label: "Ticket Monitoring",   icon: Ticket },
@@ -16,26 +16,45 @@ const NAV_ITEMS = [
 ];
 
 export default function AdminSidebar() {
-  const pathname = usePathname();
+  const pathname    = usePathname();
+  const [open, setOpen] = useState(false);
 
-  return (
-    <aside className="admin-sidebar flex flex-col">
+  // Tutup sidebar saat navigasi (mobile)
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // Tutup saat klik overlay
+  const handleOverlayClick = () => setOpen(false);
+
+  const SidebarContent = () => (
+    <aside className={`admin-sidebar flex flex-col ${open ? "open" : ""}`}>
       {/* Brand */}
       <div className="px-5 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <Shield size={16} className="text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
+              <Shield size={16} className="text-white" />
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-white leading-tight">Admin Portal</p>
+              <p className="text-[10px] text-slate-500 leading-tight">Support &amp; Incident Mgmt</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[13px] font-700 text-white">Admin Portal</p>
-            <p className="text-[10px] text-slate-500">Support &amp; Incident Mgmt</p>
-          </div>
+          {/* Close button — hanya tampil di mobile */}
+          <button
+            onClick={() => setOpen(false)}
+            className="md:hidden p-1 rounded-lg text-slate-500 hover:text-white hover:bg-white/10 transition-all"
+            aria-label="Tutup menu"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 py-3">
-        <p className="px-5 py-2 text-[10px] font-700 text-slate-600 uppercase tracking-widest">
+        <p className="px-5 py-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
           Main Menu
         </p>
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -48,9 +67,9 @@ export default function AdminSidebar() {
               href={href}
               className={`sidebar-link ${isActive ? "active" : ""}`}
             >
-              <Icon size={16} />
+              <Icon size={16} className="shrink-0" />
               <span className="flex-1">{label}</span>
-              {isActive && <ChevronRight size={13} className="opacity-50" />}
+              {isActive && <ChevronRight size={13} className="opacity-50 shrink-0" />}
             </Link>
           );
         })}
@@ -59,11 +78,11 @@ export default function AdminSidebar() {
       {/* Footer */}
       <div className="px-5 py-4 border-t border-white/10">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="w-7 h-7 rounded-full bg-indigo-700 flex items-center justify-center text-[11px] font-700 text-white">
+          <div className="w-7 h-7 rounded-full bg-indigo-700 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
             A
           </div>
-          <div>
-            <p className="text-[12px] font-600 text-slate-300">Administrator</p>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-slate-300 truncate">Administrator</p>
             <p className="text-[10px] text-slate-600">Super Admin</p>
           </div>
         </div>
@@ -85,5 +104,30 @@ export default function AdminSidebar() {
         </Link>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <SidebarContent />
+
+      {/* Mobile: overlay backdrop */}
+      {open && (
+        <div
+          className="sidebar-overlay open"
+          onClick={handleOverlayClick}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Mobile: hamburger toggle button — muncul di kiri atas halaman */}
+      <button
+        onClick={() => setOpen(true)}
+        className="mobile-nav-toggle fixed top-3 left-3 z-50"
+        aria-label="Buka menu navigasi"
+      >
+        <Menu size={18} />
+      </button>
+    </>
   );
 }

@@ -136,7 +136,8 @@ services:
       JWT_SECRET:          ${JWT_SECRET:-28d1ea9e34b789c1925646b54837f6444d66d39b98bfd62921b1e0b31b348416}
       NEXTAUTH_URL:        ${NEXTAUTH_URL:-http://localhost:3001}
     volumes:
-      - ./uploads:/app/public/uploads 
+      - ./uploads:/app/public/uploads
+      - ./logs/frontend:/app/logs
     networks:
       - sis-network
     depends_on:
@@ -256,8 +257,6 @@ volumes:
   reports_data:
     name: formbricks-discord-bot_reports_data
     external: true
-  uploads_data:
-    name: formbricks-discord-bot_uploads_data
 
 # ── Networks ───────────────────────────────────────────────────────────────────
 networks:

@@ -232,7 +232,7 @@ export default function DashboardClient({ incidents, stats, orgName, orgDepartme
                     <div className="w-6 h-6 rounded-md bg-indigo-100 flex items-center justify-center">
                       <FileText size={13} className="text-indigo-600" />
                     </div>
-                    <h2 className="text-[13px] font-bold text-slate-800">Hasil Cek Status Tiket</h2>
+                    <h2 className="text-[13px] font-bold text-white">Hasil Cek Status Tiket</h2>
                   </>
                 ) : (
                   <>

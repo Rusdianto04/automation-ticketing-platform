@@ -1,9 +1,6 @@
 /**
  * src/services/email.service.js
  * Email Service — SMTP via Nodemailer
- *
- * Mengirim konfirmasi tiket ke pelapor.
- * Tidak blocking — error dilog tapi tidak di-throw.
  */
 
 "use strict";
@@ -29,10 +26,6 @@ transporter.verify((err) => {
 
 // ─── Send ─────────────────────────────────────────────────────────────────────
 
-/**
- * Kirim email generic.
- * @param {{ to: string, subject: string, html: string }}
- */
 async function sendEmail({ to, subject, html }) {
   if (!to) {
     console.warn("⚠ [EMAIL] No recipient — skipping");
@@ -53,13 +46,6 @@ async function sendEmail({ to, subject, html }) {
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
-/**
- * Template konfirmasi penerimaan tiket.
- *
- * @param {object} ticket      — normalized ticket
- * @param {string} ticketType  — "TICKETING" | "INCIDENT"
- * @param {string} portalUrl   — base URL portal
- */
 function buildConfirmationEmail(ticket, ticketType, portalUrl) {
   const fields       = ticket.formFields || ticket.form_fields || {};
   const reporterName = fields["Reporter Information"] || "Pelapor";
@@ -74,40 +60,80 @@ function buildConfirmationEmail(ticket, ticketType, portalUrl) {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body        { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
-    .container  { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header     { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-    .header h1  { margin: 0; font-size: 24px; }
-    .content    { background: #fff; padding: 30px; border: 1px solid #e0e0e0; }
-    .info-box   { background: #f8f9fa; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; border-radius: 4px; }
-    .info-box strong { color: #667eea; }
-    .info-item  { margin: 10px 0; }
-    .footer     { background: #f8f9fa; padding: 20px; text-align: center; border-radius: 0 0 10px 10px; font-size: 12px; color: #666; }
-    .button     { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    body        { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background: #f4f4f4; }
+    .container  { max-width: 600px; margin: 20px auto; padding: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .header     { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 32px 30px; text-align: center; }
+    .header h1  { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.3px; }
+    .header p   { margin: 8px 0 0; font-size: 13px; opacity: 0.85; }
+    .content    { background: #ffffff; padding: 30px; }
+    .greeting   { font-size: 15px; color: #334155; margin-bottom: 16px; }
+    .info-box   { background: #f8f9ff; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; border-radius: 0 8px 8px 0; }
+    .info-box h3 { margin: 0 0 14px; font-size: 14px; color: #4f46e5; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-item  { margin: 8px 0; font-size: 13px; color: #475569; }
+    .info-item strong { color: #334155; }
+    .status-badge { display: inline-block; background: #dcfce7; color: #166534; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .message    { font-size: 13px; color: #64748b; margin: 16px 0; line-height: 1.7; }
+    .btn-wrap   { text-align: center; margin: 28px 0 10px; }
+    /* FIX: tombol dengan warna putih eksplisit di inline style agar tidak terpengaruh email client */
+    .footer     { background: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e8eaed; }
+    .footer p   { margin: 4px 0; font-size: 12px; color: #94a3b8; }
+    .footer strong { color: #64748b; }
+    .divider    { border: none; border-top: 1px solid #e8eaed; margin: 20px 0; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header"><h1>✅ Konfirmasi Penerimaan Ticket</h1></div>
+    <div class="header">
+      <h1>✅ Konfirmasi Penerimaan Ticket</h1>
+      <p>${orgName} — IT Support Team</p>
+    </div>
     <div class="content">
-      <p><strong>Yth. Bapak/Ibu ${reporterName},</strong></p>
-      <p>Terima kasih telah menghubungi <strong>IT Support ${orgName}</strong>.</p>
+      <p class="greeting">Yth. Bapak/Ibu <strong>${reporterName}</strong>,</p>
+      <p class="message">
+        Terima kasih telah menghubungi <strong>IT Support ${orgName}</strong>. 
+        Ticket Anda telah berhasil diterima dan sedang dalam antrian penanganan.
+      </p>
+
       <div class="info-box">
-        <h3 style="margin-top:0;color:#667eea">📋 Informasi Ticket</h3>
-        <div class="info-item"><strong>Nomor Ticket:</strong> ${ticketLabel}</div>
-        <div class="info-item"><strong>Jenis Layanan:</strong> ${serviceType}</div>
-        <div class="info-item"><strong>Status:</strong> <span style="color:#28a745;font-weight:bold">Open (Dalam Proses)</span></div>
-        <div class="info-item"><strong>Tanggal Laporan:</strong> ${reportDate}</div>
+        <h3>📋 Informasi Ticket</h3>
+        <div class="info-item"><strong>Nomor Ticket :</strong> ${ticketLabel}</div>
+        <div class="info-item"><strong>Jenis Layanan :</strong> ${serviceType}</div>
+        <div class="info-item"><strong>Status :</strong> <span class="status-badge">🟢 Open — Sedang Diproses</span></div>
+        <div class="info-item"><strong>Tanggal Laporan :</strong> ${reportDate}</div>
       </div>
-      <p>Tim IT Support akan segera meninjau dan menindaklanjuti permasalahan Anda.</p>
-      <div style="text-align:center">
-        <a href="${portalUrl}/tickets/${ticket.id}" class="button">📊 Pantau Status Ticket</a>
+
+      <p class="message">
+        Tim IT Support akan segera meninjau dan menindaklanjuti permasalahan Anda. 
+        Gunakan tombol di bawah untuk memantau status ticket secara realtime.
+      </p>
+
+      <hr class="divider" />
+
+      <div class="btn-wrap">
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${portalUrl}/tickets/${ticket.id}" style="height:44px;v-text-anchor:middle;width:220px;" arcsize="25%" stroke="f" fillcolor="#667eea">
+          <w:anchorlock/>
+          <center style="color:#ffffff;font-family:sans-serif;font-size:14px;font-weight:bold;">📊 Pantau Status Ticket</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
+        <a href="${portalUrl}/tickets/${ticket.id}"
+           target="_blank"
+           style="display:inline-block;padding:13px 32px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff !important;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;font-family:'Segoe UI',Arial,sans-serif;letter-spacing:0.3px;box-shadow:0 4px 12px rgba(102,126,234,0.4);">
+          📊 Pantau Status Ticket
+        </a>
+        <!--<![endif]-->
       </div>
+
+      <p style="text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;">
+        Atau buka link: <a href="${portalUrl}/tickets/${ticket.id}" style="color:#667eea;">${portalUrl}/tickets/${ticket.id}</a>
+      </p>
     </div>
     <div class="footer">
       <p><strong>IT Support Team — ${orgName}</strong></p>
-      <p style="font-size:11px;color:#999">Email ini dikirim otomatis, mohon tidak membalas.</p>
+      <p>Email ini dikirim otomatis, mohon tidak membalas langsung.</p>
     </div>
   </div>
 </body>
