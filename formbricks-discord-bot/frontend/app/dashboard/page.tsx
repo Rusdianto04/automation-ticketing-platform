@@ -2,7 +2,6 @@
 import { Metadata } from "next";
 import {
   getIncidentTickets,
-  getTicketStats,
   getTicketTitle,
   formatDate,
 } from "@/lib/tickets";
@@ -15,10 +14,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [incidents, stats] = await Promise.all([
-    getIncidentTickets(50),
-    getTicketStats(),
-  ]);
+  const incidents = await getIncidentTickets(10);
 
   const incidentData = incidents.map((t) => ({
     id: t.id,
@@ -36,7 +32,6 @@ export default async function DashboardPage() {
   return (
     <DashboardClient
       incidents={incidentData}
-      stats={stats}
       orgName={process.env.ORG_NAME || "SEAMOLEC"}
       orgDepartment={process.env.ORG_DEPARTMENT || "IT Infrastructure"}
     />
