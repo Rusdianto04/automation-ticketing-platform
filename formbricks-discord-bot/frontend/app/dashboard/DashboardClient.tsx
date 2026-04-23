@@ -34,16 +34,21 @@ interface Props {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<string, string> = {
-  OPEN:        "bg-emerald-100 text-emerald-800 border border-emerald-300",
-  PENDING:     "bg-amber-100 text-amber-800 border border-amber-300",
-  DONE:        "bg-blue-100 text-blue-800 border border-blue-300",
-  REJECT:      "bg-red-100 text-red-800 border border-red-300",
-  INVESTIGASI: "bg-orange-100 text-orange-800 border border-orange-300",
-  MITIGASI:    "bg-purple-100 text-purple-800 border border-purple-300",
-  RESOLVED:    "bg-teal-100 text-teal-800 border border-teal-300",
+const STATUS_STYLE: Record<string, React.CSSProperties> = {
+  OPEN:        { background: "#e0f2fe", color: "#0369a1", border: "1px solid #7dd3fc" }, // sky-biru
+  PENDING:     { background: "#fffbeb", color: "#92400e", border: "1px solid #fcd34d" }, // amber-kuning
+  DONE:        { background: "#eff6ff", color: "#1e40af", border: "1px solid #93c5fd" }, // blue-biru tua
+  APPROVED:    { background: "#f5f3ff", color: "#4c1d95", border: "1px solid #c4b5fd" }, // violet-ungu
+  REJECT:      { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }, // red-merah
+  INVESTIGASI: { background: "#fff7ed", color: "#9a3412", border: "1px solid #fdba74" }, // orange
+  MITIGASI:    { background: "#fdf2f8", color: "#831843", border: "1px solid #f9a8d4" }, // pink
+  RESOLVED:    { background: "#ecfdf5", color: "#065f46", border: "1px solid #6ee7b7" }, // emerald-hijau
 };
+const DEFAULT_STATUS_STYLE: React.CSSProperties = {
+  background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1",
+};
+// Tetap dibutuhkan untuk fallback className kosong
+const STATUS_COLORS: Record<string, string> = {};
 
 const PRIORITY_COLORS: Record<string, string> = {
   Critical: "bg-red-100 text-red-800 border border-red-300",
@@ -415,111 +420,111 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
 // ─── Incident Card — tampilan card terpisah per incident ──────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => void }) {
-  const leftBorderColor = PRIORITY_LEFT_BORDER[inc.priority] || "#94a3b8";
-
   return (
     <Link
       href={`/tickets/${inc.id}`}
-      className="block bg-white rounded-lg overflow-hidden transition-all duration-150 hover:shadow-sm hover:-translate-y-px active:scale-[0.99]"
-      style={{
-        border: "1px solid #e8eaed",
-        borderLeft: `4px solid ${leftBorderColor}`,
-      }}
+      className="block bg-white overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99]"
+      style={{ border: "1px solid #e2e8f0", borderRadius: "10px" }}
     >
-      <div className="px-4 py-2.5">
+      {/* Flex row: konten kiri (flex-1) + panel kanan (tanggal + ⋮) */}
+      <div className="flex items-stretch px-5 py-3 gap-4">
 
-        {/* ── Baris 1: KIRI (ID + Status + Incident) ←→ KANAN (Judul + ⋮) ── */}
-        <div className="flex items-center justify-between gap-4 mb-1.5">
+        {/* ── Konten Kiri ── */}
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
 
-          {/* Kiri: ID + Status + label Incident */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded"
-              style={{ color: "#1e293b", background: "#f1f5f9" }}
-            >
-              #{inc.id}
-            </span>
-            <span
-              className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
-              style={{ background: "#f1f5f9", color: "#1e293b", border: "1px solid #cbd5e1" }}
-            >
-              {inc.status}
-            </span>
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-              style={{ background: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
-            >
-              <AlertTriangle size={9} />
-              Incident
-            </span>
-          </div>
+          {/* Baris 1: Judul */}
+          <p className="font-bold text-slate-800 text-[13px] leading-tight truncate">
+            {inc.title}
+          </p>
 
-          {/* Kanan: Judul + tombol ⋮ */}
-          <div className="flex items-center gap-2 min-w-0">
-            <p
-              className="font-bold text-[12px] leading-tight truncate text-right"
-              style={{ color: "#1e293b" }}
-            >
-              {inc.title}
-            </p>
-            <div
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDetail();
-              }}
-              className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition-colors cursor-pointer"
-              style={{ color: "#94a3b8" }}
-              onMouseOver={(e) => (e.currentTarget.style.color = "#475569")}
-              onMouseOut={(e)  => (e.currentTarget.style.color = "#94a3b8")}
-              title="Lihat ringkasan"
-            >
-              <MoreVertical size={14} />
+          {/* Baris 2: Kolom-kolom info */}
+          <div className="flex items-center gap-0 w-full">
+
+            {/* Kolom: ID */}
+            <div className="flex flex-col items-start gap-0.5 pr-4 border-r border-slate-100" style={{ minWidth: 44 }}>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">ID</span>
+              <span
+                className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded"
+                style={{ color: "#1e293b", background: "#f1f5f9" }}
+              >
+                #{inc.id}
+              </span>
             </div>
+
+            {/* Kolom: Status */}
+            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 90 }}>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Status</span>
+              <span
+                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={STATUS_STYLE[inc.status] || DEFAULT_STATUS_STYLE}
+              >
+                {inc.status}
+              </span>
+            </div>
+
+            {/* Kolom: Type */}
+            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 80 }}>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Type</span>
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={{ background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" }}
+              >
+                <AlertTriangle size={9} />
+                Incident
+              </span>
+            </div>
+
+            {/* Kolom: Priority */}
+            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 80 }}>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Priority</span>
+              <span
+                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  PRIORITY_COLORS[inc.priority] || "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {inc.priority}
+              </span>
+            </div>
+
+            {/* Kolom: Severity */}
+            {inc.severity && inc.severity !== "—" && (
+              <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 100 }}>
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Severity</span>
+                <span
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                  style={{ background: "#f8fafc", color: "#64748b", border: "1px solid #e2e8f0" }}
+                >
+                  {inc.severity}
+                </span>
+              </div>
+            )}
+
+            {/* Kolom: Area */}
+            {inc.suspect_area && inc.suspect_area !== "—" && (
+              <div className="flex flex-col items-start gap-0.5 px-4 flex-1 min-w-0">
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Area</span>
+                <span className="text-[10px] text-slate-600 font-medium truncate w-full">
+                  {inc.suspect_area}
+                </span>
+              </div>
+            )}
+
           </div>
         </div>
 
-        {/* ── Baris 2: KIRI (Area + Priority + Severity) ←→ KANAN (Tanggal + Chevron) ── */}
-        <div className="flex items-center justify-between gap-4">
-
-          {/* Kiri: Area + Priority + Severity — monokrom */}
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            {inc.suspect_area && inc.suspect_area !== "—" && (
-              <span
-                className="text-[10px] truncate max-w-[180px]"
-                style={{ color: "#64748b" }}
-              >
-                <span className="font-semibold uppercase tracking-wide" style={{ color: "#94a3b8" }}>
-                  Area:
-                </span>{" "}
-                {inc.suspect_area}
-              </span>
-            )}
-            <span
-              className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-              style={{ background: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
-            >
-              {inc.priority}
-            </span>
-            {inc.severity && inc.severity !== "—" && (
-              <span
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" }}
-              >
-                {inc.severity}
-              </span>
-            )}
-          </div>
-
-          {/* Kanan: Tanggal + Chevron */}
-          <div className="flex items-center gap-1 shrink-0">
-            <span
-              className="text-[10px] whitespace-nowrap"
-              style={{ color: "#94a3b8" }}
-            >
-              {inc.created_at}
-            </span>
-            <ChevronRight size={12} style={{ color: "#cbd5e1" }} />
+        {/* ── Panel Kanan: Tanggal + ⋮ — rata tengah vertikal penuh ── */}
+        <div className="flex flex-col items-end justify-center gap-1.5 shrink-0 border-l border-slate-100 pl-4">
+          <span className="text-[10px] text-slate-400 whitespace-nowrap">{inc.created_at}</span>
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDetail();
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Lihat ringkasan"
+          >
+            <MoreVertical size={14} />
           </div>
         </div>
 
@@ -527,7 +532,6 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
     </Link>
   );
 }
-
 // ─── Ticket Search Result ─────────────────────────────────────────────────────
 
 function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
@@ -547,15 +551,16 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
     RESOLVED:    "Resolved",
   };
 
-  const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-    OPEN:        { bg: "#f0fdf4", text: "#166534", border: "#86efac", dot: "#22c55e" },
-    PENDING:     { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },
-    DONE:        { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },
-    REJECT:      { bg: "#fff5f5", text: "#991b1b", border: "#fca5a5", dot: "#ef4444" },
-    IN_PROGRESS: { bg: "#f0f9ff", text: "#075985", border: "#7dd3fc", dot: "#0ea5e9" },
-    INVESTIGASI: { bg: "#fff7ed", text: "#9a3412", border: "#fdba74", dot: "#f97316" },
-    MITIGASI:    { bg: "#faf5ff", text: "#6b21a8", border: "#c4b5fd", dot: "#8b5cf6" },
-    RESOLVED:    { bg: "#f0fdfa", text: "#134e4a", border: "#5eead4", dot: "#14b8a6" },
+const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+    OPEN:        { bg: "#e0f2fe", text: "#0c4a6e", border: "#7dd3fc", dot: "#0ea5e9" },   // sky
+    PENDING:     { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },   // amber
+    DONE:        { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },   // blue
+    APPROVED:    { bg: "#f5f3ff", text: "#4c1d95", border: "#c4b5fd", dot: "#7c3aed" },   // violet
+    REJECT:      { bg: "#fef2f2", text: "#991b1b", border: "#fecaca", dot: "#ef4444" },   // red
+    IN_PROGRESS: { bg: "#fdf4ff", text: "#701a75", border: "#e879f9", dot: "#d946ef" },   // fuchsia
+    INVESTIGASI: { bg: "#fff7ed", text: "#9a3412", border: "#fdba74", dot: "#f97316" },   // orange
+    MITIGASI:    { bg: "#fdf2f8", text: "#831843", border: "#f9a8d4", dot: "#ec4899" },   // pink
+    RESOLVED:    { bg: "#ecfdf5", text: "#065f46", border: "#6ee7b7", dot: "#10b981" },   // emerald
   };
 
   const sd = STATUS_DISPLAY[status] || { bg: "#f8fafc", text: "#475569", border: "#cbd5e1", dot: "#94a3b8" };
@@ -691,7 +696,10 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
             </div>
             <div>
               <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Status</p>
-              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[incident.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+              <span
+                className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                style={STATUS_STYLE[incident.status] || DEFAULT_STATUS_STYLE}
+              >
                 {incident.status}
               </span>
             </div>
