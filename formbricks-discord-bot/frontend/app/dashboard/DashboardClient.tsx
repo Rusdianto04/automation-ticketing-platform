@@ -11,6 +11,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Ticket } from "lucide-react";
+import { Filter, RefreshCw } from "lucide-react";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,15 +36,18 @@ interface Props {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+
+
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
-  OPEN:        { background: "#e0f2fe", color: "#0369a1", border: "1px solid #7dd3fc" }, // sky-biru
-  PENDING:     { background: "#fffbeb", color: "#92400e", border: "1px solid #fcd34d" }, // amber-kuning
-  DONE:        { background: "#eff6ff", color: "#1e40af", border: "1px solid #93c5fd" }, // blue-biru tua
-  APPROVED:    { background: "#f5f3ff", color: "#4c1d95", border: "1px solid #c4b5fd" }, // violet-ungu
-  REJECT:      { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }, // red-merah
+  OPEN: { background: "#e0f2fe", color: "#0369a1", border: "1px solid #7dd3fc" }, // sky-biru
+  PENDING: { background: "#fffbeb", color: "#92400e", border: "1px solid #fcd34d" }, // amber-kuning
+  DONE: { background: "#eff6ff", color: "#1e40af", border: "1px solid #93c5fd" }, // blue-biru tua
+  APPROVED: { background: "#f5f3ff", color: "#4c1d95", border: "1px solid #c4b5fd" }, // violet-ungu
+  REJECT: { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }, // red-merah
   INVESTIGASI: { background: "#fff7ed", color: "#9a3412", border: "1px solid #fdba74" }, // orange
-  MITIGASI:    { background: "#fdf2f8", color: "#831843", border: "1px solid #f9a8d4" }, // pink
-  RESOLVED:    { background: "#ecfdf5", color: "#065f46", border: "1px solid #6ee7b7" }, // emerald-hijau
+  MITIGASI: { background: "#fdf2f8", color: "#831843", border: "1px solid #f9a8d4" }, // pink
+  RESOLVED: { background: "#ecfdf5", color: "#065f46", border: "1px solid #6ee7b7" }, // emerald-hijau
 };
 const DEFAULT_STATUS_STYLE: React.CSSProperties = {
   background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1",
@@ -52,23 +57,23 @@ const STATUS_COLORS: Record<string, string> = {};
 
 const PRIORITY_COLORS: Record<string, string> = {
   Critical: "bg-red-100 text-red-800 border border-red-300",
-  High:     "bg-orange-100 text-orange-800 border border-orange-300",
-  Medium:   "bg-amber-100 text-amber-800 border border-amber-300",
-  Low:      "bg-green-100 text-green-800 border border-green-300",
-  high:     "bg-orange-100 text-orange-800 border border-orange-300",
-  medium:   "bg-amber-100 text-amber-800 border border-amber-300",
-  low:      "bg-green-100 text-green-800 border border-green-300",
+  High: "bg-orange-100 text-orange-800 border border-orange-300",
+  Medium: "bg-amber-100 text-amber-800 border border-amber-300",
+  Low: "bg-green-100 text-green-800 border border-green-300",
+  high: "bg-orange-100 text-orange-800 border border-orange-300",
+  medium: "bg-amber-100 text-amber-800 border border-amber-300",
+  low: "bg-green-100 text-green-800 border border-green-300",
 };
 
 // Warna dot priority untuk aksen left border card
 const PRIORITY_LEFT_BORDER: Record<string, string> = {
   Critical: "#ef4444",
-  High:     "#f97316",
-  Medium:   "#f59e0b",
-  Low:      "#22c55e",
-  high:     "#f97316",
-  medium:   "#f59e0b",
-  low:      "#22c55e",
+  High: "#f97316",
+  Medium: "#f59e0b",
+  Low: "#22c55e",
+  high: "#f97316",
+  medium: "#f59e0b",
+  low: "#22c55e",
 };
 
 const FLOOR_OPTIONS = ["Lantai 1", "Lantai 2", "Lantai 3"];
@@ -90,22 +95,42 @@ const SEVERITY_OPTIONS = [
 async function uploadFileToServer(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res  = await fetch("/api/tickets/upload", { method: "POST", body: fd });
+  const res = await fetch("/api/tickets/upload", { method: "POST", body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Gagal upload file");
   return data.url as string;
 }
 
+
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DashboardClient({ incidents, orgName, orgDepartment }: Props) {
-  const [searchId,      setSearchId]      = useState("");
-  const [searchInput,   setSearchInput]   = useState("");
-  const [searchResult,  setSearchResult]  = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
+  const [searchId, setSearchId] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResult, setSearchResult] = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  const [modal,            setModal]            = useState<null | "support" | "incident">(null);
+  const [modal, setModal] = useState<null | "support" | "incident">(null);
   const [selectedIncident, setSelectedIncident] = useState<IncidentRow | null>(null);
+
+  const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [filterPriority, setFilterPriority] = useState<string>("ALL");
+  const [showFilter, setShowFilter] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await new Promise((r) => setTimeout(r, 500));
+    window.location.reload();
+  }, []);
+
+  const filteredIncidents = incidents.filter((inc) => {
+    const statusMatch = filterStatus === "ALL" || inc.status === filterStatus;
+    const priorityMatch = filterPriority === "ALL" || inc.priority === filterPriority;
+    return statusMatch && priorityMatch;
+  });
+
 
   const handleSearchTicket = useCallback(async () => {
     const rawId = searchInput.trim().replace(/^#/, "");
@@ -144,6 +169,8 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#d9e1f2" }}>
 
+
+
       {/* ═══════════════════════════════════════════════════════
           HEADER — Diperbesar: h-20 (80px), logo lebih besar
       ════════════════════════════════════════════════════════ */}
@@ -154,7 +181,7 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
           borderBottom: "1px solid rgba(255,255,255,0.06)",
         }}
       >
-        <div className="max-w-screen-xl mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full px-5 sm:px-8 lg:px-10">
           <div className="flex items-center justify-between h-20">
 
             {/* Kiri: Logo + Teks */}
@@ -165,9 +192,6 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
                 style={{
                   width: 52,
                   height: 52,
-                  background: "rgba(255,255,255,0.07)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  padding: 4,
                 }}
               >
                 <Image
@@ -176,7 +200,6 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
                   width={44}
                   height={44}
                   className="object-contain"
-                  style={{ imageRendering: "crisp-edges" }}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = "/logo-seamolec.ico";
                   }}
@@ -208,112 +231,127 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
       </header>
 
       <main className="flex-1 max-w-screen-xl mx-auto px-3 sm:px-6 lg:px-8 py-5 w-full">
-        {/* 3 Card Utama — stacked vertikal dengan gap */}
-        <div className="space-y-4">
 
-          {/* ═══════════════════════════════════════════════════
-              CARD 1 — Buat Tiket Baru (tidak berubah)
+
+        {/* ═══════════════════════════════════════════════════
+              CARD 2 — Search Cek Status Tiket
           ═══════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl p-4 sm:p-5" style={{ border: "1px solid #e8eaed" }}>
-            <div className="flex items-center gap-2 mb-1">
-              <Plus size={15} className="text-indigo-600" />
-              <h2 className="text-[14px] font-bold text-slate-800">Buat Tiket Baru</h2>
-            </div>
-            <p className="text-[12px] text-slate-500 mb-4 leading-relaxed">
-              Pilih jenis tiket yang ingin Anda buat. Tiket support untuk masalah teknis perangkat/aplikasi, tiket incident untuk kejadian gangguan sistem.
-            </p>
-            <div className="flex flex-wrap gap-2.5">
+        <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8eaed" }}>
+
+          {/* Header Card 2 */}
+          <div
+            className="px-4 sm:px-5 py-3.5"
+            style={{ background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              {/* Buat Ticket Support */}
               <button
                 onClick={() => setModal("support")}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold text-white"
-                style={{ background: "linear-gradient(135deg, #4f46e5, #6366f1)", boxShadow: "0 1px 3px rgba(79,70,229,0.3)" }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "#4338ca")}
-                onMouseOut={(e)  => (e.currentTarget.style.background = "linear-gradient(135deg, #4f46e5, #6366f1)")}
+                style={{ background: "#374151" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
               >
                 <Ticket size={14} />
                 Buat Tiket Support
               </button>
-              <button
-                onClick={() => setModal("incident")}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold text-white"
-                style={{ background: "linear-gradient(135deg, #e11d48, #f43f5e)", boxShadow: "0 1px 3px rgba(225,29,72,0.3)" }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "#bb1e40")}
-                onMouseOut={(e)  => (e.currentTarget.style.background = "linear-gradient(135deg, #e11d48, #f43f5e)")}
-              >
-                <Zap size={14} />
-                Laporkan Incident
-              </button>
-            </div>
-          </div>
+              {/* Search bar */}
+              <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto">
 
-          {/* ═══════════════════════════════════════════════════
-              CARD 2 — Search Cek Status Tiket
-          ═══════════════════════════════════════════════════ */}
-          <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8eaed" }}>
-
-            {/* Header Card 2 */}
-            <div
-              className="px-4 sm:px-5 py-3.5"
-              style={{ background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-
-                {/* Judul */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="w-6 h-6 rounded-md bg-indigo-100 flex items-center justify-center">
-                    <FileText size={13} className="text-indigo-600" />
-                  </div>
-                  <h2 className="text-[13px] font-bold text-white">Cek Status Tiket</h2>
+                <div className="relative flex-1 sm:w-64">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearchTicket()}
+                    placeholder="Masukkan ID tiket (contoh: 42)"
+                    className="w-full pl-8 pr-3 py-2 text-[12px] bg-white text-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    style={{ border: "1px solid #d1d5db" }}
+                  />
                 </div>
-
-                {/* Search bar */}
-                <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearchTicket()}
-                      placeholder="Masukkan ID tiket (contoh: 42)"
-                      className="w-full pl-8 pr-3 py-2 text-[12px] bg-white text-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      style={{ border: "1px solid #d1d5db" }}
-                    />
-                  </div>
+                {/* Kanan: Filter + Refresh */}
+                {/* Filter dropdown */}
+                <div className="relative">
                   <button
-                    onClick={handleSearchTicket}
-                    disabled={searchLoading}
+                    onClick={() => setShowFilter(!showFilter)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold text-white whitespace-nowrap"
-                    style={{ background: "#4f46e5" }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = "#4338ca")}
-                    onMouseOut={(e)  => (e.currentTarget.style.background = "#4f46e5")}
+                    style={{ background: showFilter ? "#374151" : "#374151", border: "1px solid rgba(255,255,255,0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
                   >
-                    {searchLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-                    Cari
+                    <Filter size={12} />
+                    Filter
+                    {(filterStatus !== "ALL" || filterPriority !== "ALL") && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 ml-0.5" />
+                    )}
                   </button>
-                  {isSearchMode && (
-                    <button
-                      onClick={handleClearSearch}
-                      className="flex items-center gap-1 px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-600 whitespace-nowrap"
-                      style={{ background: "#f1f3f5", border: "1px solid #e2e8f0" }}
-                      onMouseOver={(e) => (e.currentTarget.style.background = "#e2e8f0")}
-                      onMouseOut={(e)  => (e.currentTarget.style.background = "#f1f3f5")}
+
+                  {showFilter && (
+                    <div
+                      className="absolute right-0 top-full mt-1.5 bg-white rounded-xl shadow-lg z-20 p-3 space-y-3"
+                      style={{ border: "1px solid #e2e8f0", minWidth: 200 }}
                     >
-                      <X size={12} />
-                      <span className="hidden sm:inline">Reset</span>
-                    </button>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {["ALL", "OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"].map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setFilterStatus(s)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors"
+                              style={{
+                                background: filterStatus === s ? "#1e293b" : "#f1f5f9",
+                                color: filterStatus === s ? "#fff" : "#64748b",
+                              }}
+                            >
+                              {s === "ALL" ? "Semua" : s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Priority</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {["ALL", "Critical", "High", "Medium", "Low"].map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => setFilterPriority(p)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors"
+                              style={{
+                                background: filterPriority === p ? "#1e293b" : "#f1f5f9",
+                                color: filterPriority === p ? "#fff" : "#64748b",
+                              }}
+                            >
+                              {p === "ALL" ? "Semua" : p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {(filterStatus !== "ALL" || filterPriority !== "ALL") && (
+                        <button
+                          onClick={() => { setFilterStatus("ALL"); setFilterPriority("ALL"); }}
+                          className="w-full text-[10px] text-slate-400 hover:text-slate-600 text-center pt-1"
+                        >
+                          Reset filter
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
+                {isSearchMode && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-600 whitespace-nowrap"
+                    style={{ background: "#f1f3f5", border: "1px solid #e2e8f0" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#e2e8f0")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#f1f3f5")}
+                  >
+                    <X size={12} />
+                    <span className="hidden sm:inline">Reset</span>
+                  </button>
+                )}
               </div>
-
-              {/* Hint — hanya tampil saat belum search */}
-              {!isSearchMode && (
-                <p className="text-[11px] mt-2" style={{ color: "rgba(255,255,255,0.5)" }}>
-                  Cari tiket support atau incident berdasarkan nomor ID. Contoh:{" "}
-                  <span className="font-mono font-semibold text-white">42</span> atau{" "}
-                  <span className="font-mono font-semibold text-white">#42</span>
-                </p>
-              )}
             </div>
 
             {/* Body Card 2 — hanya muncul setelah user melakukan search */}
@@ -353,7 +391,7 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
           ═══════════════════════════════════════════════════ */}
           <div>
             {/* Tidak ada judul section — langsung list card incident */}
-            {incidents.length === 0 ? (
+            {filteredIncidents.length === 0 ? (
               /* Kosong */
               <div
                 className="bg-white rounded-xl px-5 py-14 text-center"
@@ -370,7 +408,7 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
             ) : (
               /* List card incident — setiap incident = 1 card terpisah */
               <div className="space-y-3">
-                {incidents.map((inc) => (
+                {filteredIncidents.map((inc) => (
                   <IncidentCard
                     key={inc.id}
                     inc={inc}
@@ -390,23 +428,12 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
           <p className="text-[15px] text-white/70">
             Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
           </p>
-          <div className="flex justify-center flex-wrap gap-2 text-[14px] text-white/60">
-            <a href="#" className="hover:text-white transition-colors">Legal</a>
-            <span>|</span>
-            <a href="#" className="hover:text-white transition-colors">Privacy</a>
-            <span>|</span>
-            <a href="#" className="hover:text-white transition-colors">Security</a>
-            <span>|</span>
-            <a href="#" className="hover:text-white transition-colors">Accessibility</a>
-            <span>|</span>
-            <a href="#" className="hover:text-white transition-colors">Cookies</a>
-          </div>
         </div>
       </footer>
 
-      {modal === "support"  && <SupportFormModal  onClose={() => setModal(null)} />}
-      {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />}
-      {selectedIncident     && (
+      {modal === "support" && <SupportFormModal onClose={() => setModal(null)} />}
+      {/* {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />} */}
+      {selectedIncident && (
         <IncidentDetailModal
           incident={selectedIncident}
           onClose={() => setSelectedIncident(null)}
@@ -421,9 +448,9 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
 // ═══════════════════════════════════════════════════════════════════════════════
 function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => void }) {
   return (
-    <Link
-      href={`/tickets/${inc.id}`}
-      className="block bg-white overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99]"
+    <div
+      onClick={onDetail}
+      className="block bg-white overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99] cursor-pointer"
       style={{ border: "1px solid #e2e8f0", borderRadius: "10px" }}
     >
       {/* Flex row: konten kiri (flex-1) + panel kanan (tanggal + ⋮) */}
@@ -478,9 +505,8 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
             <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 80 }}>
               <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Priority</span>
               <span
-                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                  PRIORITY_COLORS[inc.priority] || "bg-slate-100 text-slate-600 border border-slate-200"
-                }`}
+                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${PRIORITY_COLORS[inc.priority] || "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
               >
                 {inc.priority}
               </span>
@@ -529,38 +555,38 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
         </div>
 
       </div>
-    </Link>
+    </div>
   );
 }
 // ─── Ticket Search Result ─────────────────────────────────────────────────────
 
 function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
-  const ff         = (ticket.form_fields || ticket.formFields || {}) as Record<string, unknown>;
-  const status     = String(ticket.status || ticket.status_pengusulan || "OPEN");
-  const type       = String(ticket.type || "TICKETING");
+  const ff = (ticket.form_fields || ticket.formFields || {}) as Record<string, unknown>;
+  const status = String(ticket.status || ticket.status_pengusulan || "OPEN");
+  const type = String(ticket.type || "TICKETING");
   const isIncident = type === "INCIDENT";
 
   const STATUS_LABELS: Record<string, string> = {
-    OPEN:        "Open",
-    PENDING:     "Pending",
-    DONE:        "Done",
-    REJECT:      "Reject",
+    OPEN: "Open",
+    PENDING: "Pending",
+    DONE: "Done",
+    REJECT: "Reject",
     IN_PROGRESS: "In Progress",
     INVESTIGASI: "Investigasi",
-    MITIGASI:    "Mitigasi",
-    RESOLVED:    "Resolved",
+    MITIGASI: "Mitigasi",
+    RESOLVED: "Resolved",
   };
 
-const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-    OPEN:        { bg: "#e0f2fe", text: "#0c4a6e", border: "#7dd3fc", dot: "#0ea5e9" },   // sky
-    PENDING:     { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },   // amber
-    DONE:        { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },   // blue
-    APPROVED:    { bg: "#f5f3ff", text: "#4c1d95", border: "#c4b5fd", dot: "#7c3aed" },   // violet
-    REJECT:      { bg: "#fef2f2", text: "#991b1b", border: "#fecaca", dot: "#ef4444" },   // red
+  const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+    OPEN: { bg: "#e0f2fe", text: "#0c4a6e", border: "#7dd3fc", dot: "#0ea5e9" },   // sky
+    PENDING: { bg: "#fffbeb", text: "#92400e", border: "#fcd34d", dot: "#f59e0b" },   // amber
+    DONE: { bg: "#eff6ff", text: "#1e40af", border: "#93c5fd", dot: "#3b82f6" },   // blue
+    APPROVED: { bg: "#f5f3ff", text: "#4c1d95", border: "#c4b5fd", dot: "#7c3aed" },   // violet
+    REJECT: { bg: "#fef2f2", text: "#991b1b", border: "#fecaca", dot: "#ef4444" },   // red
     IN_PROGRESS: { bg: "#fdf4ff", text: "#701a75", border: "#e879f9", dot: "#d946ef" },   // fuchsia
     INVESTIGASI: { bg: "#fff7ed", text: "#9a3412", border: "#fdba74", dot: "#f97316" },   // orange
-    MITIGASI:    { bg: "#fdf2f8", text: "#831843", border: "#f9a8d4", dot: "#ec4899" },   // pink
-    RESOLVED:    { bg: "#ecfdf5", text: "#065f46", border: "#6ee7b7", dot: "#10b981" },   // emerald
+    MITIGASI: { bg: "#fdf2f8", text: "#831843", border: "#f9a8d4", dot: "#ec4899" },   // pink
+    RESOLVED: { bg: "#ecfdf5", text: "#065f46", border: "#6ee7b7", dot: "#10b981" },   // emerald
   };
 
   const sd = STATUS_DISPLAY[status] || { bg: "#f8fafc", text: "#475569", border: "#cbd5e1", dot: "#94a3b8" };
@@ -623,15 +649,15 @@ const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string;
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {!isIncident && (
             <>
-              <InfoItem label="Reporter"     value={String(ff["Reporter Information"] || ff["Name"] || "—")} />
-              <InfoItem label="Email"        value={String(ff["Email"] || "—")} />
+              <InfoItem label="Reporter" value={String(ff["Reporter Information"] || ff["Name"] || "—")} />
+              <InfoItem label="Email" value={String(ff["Email"] || "—")} />
               <InfoItem label="Type Support" value={String(ff["Type of Support Requested"] || "—")} />
             </>
           )}
           {isIncident && (
             <>
-              <InfoItem label="Priority"     value={String(ff["Priority Incident"] || "—")} />
-              <InfoItem label="Severity"     value={String(ff["Severity Incident"] || "—")} />
+              <InfoItem label="Priority" value={String(ff["Priority Incident"] || "—")} />
+              <InfoItem label="Severity" value={String(ff["Severity Incident"] || "—")} />
               <InfoItem label="Suspect Area" value={String(ff["Suspect Area"] || "—")} />
             </>
           )}
@@ -645,7 +671,7 @@ const STATUS_DISPLAY: Record<string, { bg: string; text: string; border: string;
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold text-white transition-colors"
           style={{ background: "#0f172a" }}
           onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-          onMouseOut={(e)  => (e.currentTarget.style.background = "#0f172a")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
         >
           Lihat Detail Lengkap <ChevronRight size={12} />
         </Link>
@@ -722,7 +748,7 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors"
               style={{ background: "#0f172a" }}
               onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-              onMouseOut={(e)  => (e.currentTarget.style.background = "#0f172a")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
             >
               Lihat Detail Lengkap <ChevronRight size={14} />
             </Link>
@@ -733,29 +759,111 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
   );
 }
 
-// ─── Support Form Modal ───────────────────────────────────────────────────────
+// ─── Support Form Modal — Multi-Slide dengan Auto-fill Email ─────────────────
+// Slide 1: Email (cek apakah sudah pernah isi sebelumnya via localStorage)
+// Slide 2: Nama, Divisi, No Telepon (auto-fill jika email dikenal)
+// Slide 3: Detail masalah (Ruangan, Lantai, Type, Issue, dll)
 
-function SupportFormModal({ onClose }: { onClose: () => void }) {
+const STORAGE_KEY = "sis_reporter_profile";
+
+interface ReporterProfile {
+  email: string;
+  reporterInfo: string;
+  division: string;
+  noTelepon: string;
+}
+
+function loadProfile(email: string): ReporterProfile | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const profiles: ReporterProfile[] = JSON.parse(raw);
+    return profiles.find((p) => p.email.toLowerCase() === email.toLowerCase()) || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveProfile(profile: ReporterProfile) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const profiles: ReporterProfile[] = raw ? JSON.parse(raw) : [];
+    const idx = profiles.findIndex((p) => p.email.toLowerCase() === profile.email.toLowerCase());
+    if (idx >= 0) profiles[idx] = profile;
+    else profiles.push(profile);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+  } catch { }
+}
+
+export function SupportFormModal({ onClose }: { onClose: () => void }) {
   const now = new Date().toLocaleString("id-ID", {
     timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short",
   });
 
-  const [form, setForm] = useState({
-    reporterInfo: "", division: "", noTelepon: "", email: "",
-    idDevice: "", ruangan: "", lantai: "",
-    typeOfSupport: "", typeOther: "", issue: "", jumlahBarang: "",
-  });
+  const [slide, setSlide] = useState(1);
+  const TOTAL_SLIDES = 3;
 
+  // Slide 1
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [autoFilled, setAutoFilled] = useState(false);
+
+  // Slide 2
+  const [reporterInfo, setReporterInfo] = useState("");
+  const [division, setDivision] = useState("");
+  const [noTelepon, setNoTelepon] = useState("");
+
+  // Slide 3
+  const [idDevice, setIdDevice] = useState("");
+  const [ruangan, setRuangan] = useState("");
+  const [lantai, setLantai] = useState("");
+  const [typeOfSupport, setTypeOfSupport] = useState("");
+  const [typeOther, setTypeOther] = useState("");
+  const [issue, setIssue] = useState("");
+  const [jumlahBarang, setJumlahBarang] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
-  const fileInputRef                     = useRef<HTMLInputElement>(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [success,    setSuccess]        = useState(false);
-  const [ticketId,   setTicketId]       = useState<number | null>(null);
-  const [error,      setError]          = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [ticketId, setTicketId] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
+  // ── Slide 1 → 2: cek email & auto-fill ──
+  const handleSlide1Next = () => {
+    const trimmed = email.trim();
+    if (!trimmed) { setEmailError("Email wajib diisi"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError("Format email tidak valid");
+      return;
+    }
+    setEmailError("");
+
+    // Auto-fill dari localStorage
+    const profile = loadProfile(trimmed);
+    if (profile) {
+      setReporterInfo(profile.reporterInfo);
+      setDivision(profile.division);
+      setNoTelepon(profile.noTelepon);
+      setAutoFilled(true);
+    } else {
+      setAutoFilled(false);
+    }
+    setSlide(2);
+  };
+
+  // ── Slide 2 → 3 ──
+  const handleSlide2Next = () => {
+    if (!reporterInfo.trim() || !division.trim() || !noTelepon.trim()) {
+      setError("Harap isi semua field yang wajib diisi (*)");
+      return;
+    }
+    setError("");
+    setSlide(3);
+  };
+
+  // ── File handling ──
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -775,9 +883,9 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // ── Submit ──
   const handleSubmit = async () => {
-    if (!form.reporterInfo || !form.division || !form.noTelepon || !form.email ||
-        !form.ruangan || !form.lantai || !form.typeOfSupport || !form.issue) {
+    if (!ruangan.trim() || !lantai || !typeOfSupport || !issue.trim()) {
       setError("Harap isi semua field yang wajib diisi (*)");
       return;
     }
@@ -785,28 +893,38 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     try {
       let attachmentUrl: string | null = null;
-      if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
+      if (selectedFile) {
+        const fd = new FormData();
+        fd.append("file", selectedFile);
+        const r = await fetch("/api/tickets/upload", { method: "POST", body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Gagal upload file");
+        attachmentUrl = d.url;
+      }
 
-      const typeValue = form.typeOfSupport === "Other" ? (form.typeOther || "Other") : form.typeOfSupport;
+      const typeValue = typeOfSupport === "Other" ? (typeOther || "Other") : typeOfSupport;
       const formFields: Record<string, string> = {
-        "Reporter Information":      form.reporterInfo,
-        "Division":                  form.division,
-        "No Telepon":                form.noTelepon,
-        "Email":                     form.email,
-        "ID Device":                 form.idDevice,
-        "Ruangan":                   form.ruangan,
-        "Lantai":                    form.lantai,
-        "Tanggal & Waktu Pemohon":   now,
+        "Reporter Information": reporterInfo,
+        "Division": division,
+        "No Telepon": noTelepon,
+        "Email": email,
+        "ID Device": idDevice,
+        "Ruangan": ruangan,
+        "Lantai": lantai,
+        "Tanggal & Waktu Pemohon": now,
         "Type of Support Requested": typeValue,
-        "Issue":                     form.issue,
-        "Jumlah Barang":             form.jumlahBarang,
+        "Issue": issue,
+        "Jumlah Barang": jumlahBarang,
       };
       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
-      const res  = await fetch("/api/tickets/create", {
+      // Simpan profile ke localStorage untuk auto-fill berikutnya
+      saveProfile({ email, reporterInfo, division, noTelepon });
+
+      const res = await fetch("/api/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "TICKETING", formFields, createdBy: form.reporterInfo }),
+        body: JSON.stringify({ type: "TICKETING", formFields, createdBy: reporterInfo }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal membuat tiket");
@@ -819,6 +937,7 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  // ── Success screen ──
   if (success) {
     return (
       <ModalWrapper title="Tiket Support Berhasil Dibuat" onClose={onClose}>
@@ -845,254 +964,350 @@ function SupportFormModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalWrapper title="Buat Tiket Support" onClose={onClose}>
-      <div className="space-y-4">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Reporter Information *" type="text"  value={form.reporterInfo} onChange={(v) => set("reporterInfo", v)} placeholder="Nama lengkap Anda" />
-          <FormField label="Division *"             type="text"  value={form.division}     onChange={(v) => set("division", v)}     placeholder="Divisi / Departemen" />
-          <FormField label="No Telepon *"           type="tel"   value={form.noTelepon}    onChange={(v) => set("noTelepon", v)}    placeholder="08xx-xxxx-xxxx" />
-          <FormField label="Email *"                type="email" value={form.email}        onChange={(v) => set("email", v)}        placeholder="email@perusahaan.com" />
-          <FormField label="ID Device"              type="text"  value={form.idDevice}     onChange={(v) => set("idDevice", v)}     placeholder="Serial number / asset tag" />
-          <FormField label="Ruangan *"              type="text"  value={form.ruangan}      onChange={(v) => set("ruangan", v)}      placeholder="Nama ruangan" />
-        </div>
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Lantai *</label>
-          <select value={form.lantai} onChange={(e) => set("lantai", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
-            <option value="">-- Pilih Lantai --</option>
-            {FLOOR_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Type of Support Requested *</label>
-          <select value={form.typeOfSupport} onChange={(e) => set("typeOfSupport", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
-            <option value="">-- Pilih Tipe Support --</option>
-            {SUPPORT_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-          {form.typeOfSupport === "Other" && (
-            <input type="text" value={form.typeOther} onChange={(e) => set("typeOther", e.target.value)} placeholder="Jelaskan tipe support lainnya..." className="mt-2 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400" />
-          )}
-        </div>
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Issue — Description of the Issue *</label>
-          <textarea value={form.issue} onChange={(e) => set("issue", e.target.value)} rows={4} placeholder="Jelaskan masalah yang Anda alami secara detail..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 resize-none" />
-        </div>
-        <FormField label="Jumlah Barang" type="text" value={form.jumlahBarang} onChange={(v) => set("jumlahBarang", v)} placeholder="Contoh: 1 unit laptop" />
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
-            {selectedFile ? (
-              <div className="space-y-3">
-                {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-600">
-                    <ImageIcon size={16} />
-                    <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
-                    <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-                  </div>
-                  <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 p-1"><X size={16} /></button>
-                </div>
-                <p className="text-[11px] text-slate-400">File akan diupload saat tiket dikirim</p>
+      {/* Progress bar */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-2">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className="flex items-center gap-2 flex-1">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 transition-all"
+                style={{
+                  background: s < slide ? "#374151" : s === slide ? "#374151" : "#e2e8f0",
+                  color: s <= slide ? "#fff" : "#94a3b8",
+                }}
+              >
+                {s < slide ? <CheckCircle2 size={14} /> : s}
               </div>
-            ) : (
-              <label className="cursor-pointer block text-center">
-                <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
-                  <Upload size={24} />
-                  <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
-                  <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
-                </div>
-                <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-              </label>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button onClick={handleSubmit} disabled={submitting}
-            className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-xl text-[13px] font-bold"
-            style={{ background: submitting ? "#818cf8" : "#4f46e5" }}>
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim Tiket...</> : <><Ticket size={16} /> Kirim Tiket Support</>}
-          </button>
-          <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold">
-            Batal
-          </button>
+              <div className="text-[10px] font-semibold hidden sm:block" style={{ color: s === slide ? "#4f46e5" : "#94a3b8" }}>
+                {s === 1 ? "Email" : s === 2 ? "Data Diri" : "Detail Masalah"}
+              </div>
+              {s < TOTAL_SLIDES && (
+                <div className="flex-1 h-0.5 mx-2" style={{ background: s < slide ? "#374151" : "#e2e8f0" }} />
+              )}
+            </div>
+          ))}
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px] mb-4">{error}</div>
+      )}
+
+      {/* ── Slide 1: Email ── */}
+      {slide === 1 && (
+        <div className="space-y-4">
+          <div className="text-center mb-2">
+            <p className="text-[13px] text-slate-500">Masukkan email Anda untuk memulai pengisian formulir.</p>
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Email *</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleSlide1Next()}
+              placeholder="email@perusahaan.com"
+              className="w-full px-3 py-2.5 border rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400"
+              style={{ borderColor: emailError ? "#fca5a5" : "#d1d5db" }}
+              autoFocus
+            />
+            {emailError && <p className="text-[11px] text-red-500 mt-1">{emailError}</p>}
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSlide1Next}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-[13px] font-bold"
+              style={{ background: "#374151" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
+            >
+              Lanjut <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Slide 2: Data Diri ── */}
+      {slide === 2 && (
+        <div className="space-y-4">
+          {autoFilled && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[12px] font-medium text-emerald-700" style={{ background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
+              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+              Data Anda ditemukan dan telah diisi otomatis. Silakan cek dan ubah jika perlu.
+            </div>
+          )}
+          <div className="text-[12px] text-slate-400 mb-1">Email: <strong className="text-slate-600">{email}</strong></div>
+          <FormField label="Nama Lengkap *" type="text" value={reporterInfo} onChange={setReporterInfo} placeholder="Nama lengkap Anda" />
+          <FormField label="Division / Departemen *" type="text" value={division} onChange={setDivision} placeholder="Divisi / Departemen" />
+          <FormField label="No Telepon *" type="tel" value={noTelepon} onChange={setNoTelepon} placeholder="08xx-xxxx-xxxx" />
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => { setSlide(1); setError(""); }}
+              className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-[13px] font-semibold"
+            >
+              ← Kembali
+            </button>
+            <button
+              onClick={handleSlide2Next}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-[13px] font-bold"
+              style={{ background: "#374151" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
+            >
+              Lanjut <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Slide 3: Detail Masalah ── */}
+      {slide === 3 && (
+        <div className="space-y-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField label="ID Device" type="text" value={idDevice} onChange={setIdDevice} placeholder="Serial number / asset tag" />
+            <FormField label="Ruangan *" type="text" value={ruangan} onChange={setRuangan} placeholder="Nama ruangan" />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Lantai *</label>
+            <select value={lantai} onChange={(e) => setLantai(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
+              <option value="">-- Pilih Lantai --</option>
+              {FLOOR_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Type of Support Requested *</label>
+            <select value={typeOfSupport} onChange={(e) => setTypeOfSupport(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
+              <option value="">-- Pilih Tipe Support --</option>
+              {SUPPORT_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            {typeOfSupport === "Other" && (
+              <input type="text" value={typeOther} onChange={(e) => setTypeOther(e.target.value)} placeholder="Jelaskan tipe support lainnya..." className="mt-2 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400" />
+            )}
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Issue — Deskripsi Masalah *</label>
+            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} rows={4} placeholder="Jelaskan masalah yang Anda alami secara detail..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <FormField label="Jumlah Barang" type="text" value={jumlahBarang} onChange={setJumlahBarang} placeholder="Contoh: 1 unit laptop" />
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+              {selectedFile ? (
+                <div className="space-y-3">
+                  {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-emerald-600">
+                      <ImageIcon size={16} />
+                      <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                      <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                    <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 p-1"><X size={16} /></button>
+                  </div>
+                </div>
+              ) : (
+                <label className="cursor-pointer block text-center">
+                  <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
+                    <Upload size={24} />
+                    <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
+                    <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
+                  </div>
+                  <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
+                </label>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => { setSlide(2); setError(""); }} className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-[13px] font-semibold">
+              ← Kembali
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-[13px] font-bold"
+              style={{ background: submitting ? "#818cf8" : "#4f46e5" }}
+            >
+              {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim Tiket...</> : <><Ticket size={16} /> Kirim Tiket Support</>}
+            </button>
+          </div>
+        </div>
+      )}
     </ModalWrapper>
   );
 }
 
 // ─── Incident Form Modal ──────────────────────────────────────────────────────
 
-function IncidentFormModal({ onClose }: { onClose: () => void }) {
-  const now = new Date().toLocaleString("id-ID", {
-    timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short",
-  });
+// function IncidentFormModal({ onClose }: { onClose: () => void }) {
+//   const now = new Date().toLocaleString("id-ID", {
+//     timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short",
+//   });
 
-  const [form, setForm] = useState({
-    incidentTitle: "",
-    priorityIncident: "", severityIncident: "",
-    suspectArea: "", indicatedIssue: "",
-  });
+//   const [form, setForm] = useState({
+//     incidentTitle: "",
+//     priorityIncident: "", severityIncident: "",
+//     suspectArea: "", indicatedIssue: "",
+//   });
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
-  const fileInputRef                     = useRef<HTMLInputElement>(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [success,    setSuccess]        = useState(false);
-  const [ticketId,   setTicketId]       = useState<number | null>(null);
-  const [error,      setError]          = useState("");
+//   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+//   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+//   const fileInputRef = useRef<HTMLInputElement>(null);
+//   const [submitting, setSubmitting] = useState(false);
+//   const [success, setSuccess] = useState(false);
+//   const [ticketId, setTicketId] = useState<number | null>(null);
+//   const [error, setError] = useState("");
 
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+//   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
-    if (!allowed.includes(file.type)) { setError("Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP"); return; }
-    if (file.size > 5 * 1024 * 1024) { setError("Ukuran file maksimal 5MB"); return; }
-    setError("");
-    setSelectedFile(file);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
+//   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0];
+//     if (!file) return;
+//     const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+//     if (!allowed.includes(file.type)) { setError("Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP"); return; }
+//     if (file.size > 5 * 1024 * 1024) { setError("Ukuran file maksimal 5MB"); return; }
+//     setError("");
+//     setSelectedFile(file);
+//     if (previewUrl) URL.revokeObjectURL(previewUrl);
+//     setPreviewUrl(URL.createObjectURL(file));
+//   };
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+//   const handleRemoveFile = () => {
+//     setSelectedFile(null);
+//     if (previewUrl) URL.revokeObjectURL(previewUrl);
+//     setPreviewUrl(null);
+//     if (fileInputRef.current) fileInputRef.current.value = "";
+//   };
 
-  const handleSubmit = async () => {
-    if (!form.incidentTitle || !form.priorityIncident || !form.severityIncident ||
-        !form.suspectArea || !form.indicatedIssue) {
-      setError("Harap isi semua field yang wajib diisi (*)");
-      return;
-    }
-    setError("");
-    setSubmitting(true);
-    try {
-      let attachmentUrl: string | null = null;
-      if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
+//   const handleSubmit = async () => {
+//     if (!form.incidentTitle || !form.priorityIncident || !form.severityIncident ||
+//       !form.suspectArea || !form.indicatedIssue) {
+//       setError("Harap isi semua field yang wajib diisi (*)");
+//       return;
+//     }
+//     setError("");
+//     setSubmitting(true);
+//     try {
+//       let attachmentUrl: string | null = null;
+//       if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
 
-      const formFields: Record<string, string> = {
-        "Incident Title":       form.incidentTitle,
-        "Incident Information": form.incidentTitle,
-        "Date & Time Incident": now,
-        "Priority Incident":    form.priorityIncident,
-        "Severity Incident":    form.severityIncident,
-        "Suspect Area":         form.suspectArea,
-        "Indicated Issue":      form.indicatedIssue,
-      };
-      if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
+//       const formFields: Record<string, string> = {
+//         "Incident Title": form.incidentTitle,
+//         "Incident Information": form.incidentTitle,
+//         "Date & Time Incident": now,
+//         "Priority Incident": form.priorityIncident,
+//         "Severity Incident": form.severityIncident,
+//         "Suspect Area": form.suspectArea,
+//         "Indicated Issue": form.indicatedIssue,
+//       };
+//       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
 
-      const res  = await fetch("/api/tickets/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "INCIDENT", formFields, createdBy: "static_portal" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal membuat tiket");
-      setTicketId(data.ticketId);
-      setSuccess(true);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Terjadi kesalahan");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+//       const res = await fetch("/api/tickets/create", {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ type: "INCIDENT", formFields, createdBy: "static_portal" }),
+//       });
+//       const data = await res.json();
+//       if (!res.ok) throw new Error(data.error || "Gagal membuat tiket");
+//       setTicketId(data.ticketId);
+//       setSuccess(true);
+//     } catch (e: unknown) {
+//       setError(e instanceof Error ? e.message : "Terjadi kesalahan");
+//     } finally {
+//       setSubmitting(false);
+//     }
+//   };
 
-  if (success) {
-    return (
-      <ModalWrapper title="Incident Berhasil Dilaporkan" onClose={onClose}>
-        <div className="text-center py-4">
-          <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Zap size={32} className="text-rose-600" />
-          </div>
-          <p className="text-[15px] font-bold text-slate-800 mb-2">Incident Berhasil Dilaporkan!</p>
-          <p className="text-[13px] text-slate-600 mb-2">Nomor tiket incident Anda:</p>
-          <p className="text-3xl font-black text-rose-600 mb-4">#{ticketId}</p>
-          <p className="text-[12px] text-slate-500 mb-6">Tim IT akan segera menangani incident ini.</p>
-          <div className="flex gap-2 justify-center">
-            <Link href={`/tickets/${ticketId}`} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors">
-              Lihat Detail Tiket
-            </Link>
-            <button onClick={onClose} className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-[13px] font-semibold transition-colors">
-              Tutup
-            </button>
-          </div>
-        </div>
-      </ModalWrapper>
-    );
-  }
+//   if (success) {
+//     return (
+//       <ModalWrapper title="Incident Berhasil Dilaporkan" onClose={onClose}>
+//         <div className="text-center py-4">
+//           <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+//             <Zap size={32} className="text-rose-600" />
+//           </div>
+//           <p className="text-[15px] font-bold text-slate-800 mb-2">Incident Berhasil Dilaporkan!</p>
+//           <p className="text-[13px] text-slate-600 mb-2">Nomor tiket incident Anda:</p>
+//           <p className="text-3xl font-black text-rose-600 mb-4">#{ticketId}</p>
+//           <p className="text-[12px] text-slate-500 mb-6">Tim IT akan segera menangani incident ini.</p>
+//           <div className="flex gap-2 justify-center">
+//             <Link href={`/tickets/${ticketId}`} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors">
+//               Lihat Detail Tiket
+//             </Link>
+//             <button onClick={onClose} className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-[13px] font-semibold transition-colors">
+//               Tutup
+//             </button>
+//           </div>
+//         </div>
+//       </ModalWrapper>
+//     );
+//   }
 
-  return (
-    <ModalWrapper title="Laporkan Incident" onClose={onClose}>
-      <div className="space-y-4">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
-        <FormField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident yang terjadi" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Priority Incident *</label>
-            <select value={form.priorityIncident} onChange={(e) => set("priorityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
-              <option value="">-- Pilih Priority --</option>
-              {PRIORITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Severity Incident *</label>
-            <select value={form.severityIncident} onChange={(e) => set("severityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
-              <option value="">-- Pilih Severity --</option>
-              {SEVERITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-        </div>
-        <FormField label="Suspect Area *" type="text" value={form.suspectArea} onChange={(v) => set("suspectArea", v)} placeholder="Area/sistem yang diduga menjadi penyebab" />
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Indicated Issue *</label>
-          <textarea value={form.indicatedIssue} onChange={(e) => set("indicatedIssue", e.target.value)} rows={4} placeholder="Jelaskan indikasi masalah / gejala incident yang terjadi..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400 resize-none" />
-        </div>
-        <div>
-          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-colors">
-            {selectedFile ? (
-              <div className="space-y-3">
-                {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-600">
-                    <ImageIcon size={16} />
-                    <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
-                    <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-                  </div>
-                  <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 p-1"><X size={16} /></button>
-                </div>
-                <p className="text-[11px] text-slate-400">File akan diupload saat tiket dikirim</p>
-              </div>
-            ) : (
-              <label className="cursor-pointer block text-center">
-                <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
-                  <Upload size={24} />
-                  <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
-                  <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
-                </div>
-                <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-              </label>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button onClick={handleSubmit} disabled={submitting}
-            className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-xl text-[13px] font-bold"
-            style={{ background: submitting ? "#f87171" : "#e11d48" }}>
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim...</> : <><Zap size={16} /> Laporkan Incident</>}
-          </button>
-          <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold">
-            Batal
-          </button>
-        </div>
-      </div>
-    </ModalWrapper>
-  );
-}
+//   return (
+//     <ModalWrapper title="Laporkan Incident" onClose={onClose}>
+//       <div className="space-y-4">
+//         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
+//         <FormField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident yang terjadi" />
+//         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+//           <div>
+//             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Priority Incident *</label>
+//             <select value={form.priorityIncident} onChange={(e) => set("priorityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
+//               <option value="">-- Pilih Priority --</option>
+//               {PRIORITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+//             </select>
+//           </div>
+//           <div>
+//             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Severity Incident *</label>
+//             <select value={form.severityIncident} onChange={(e) => set("severityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
+//               <option value="">-- Pilih Severity --</option>
+//               {SEVERITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+//             </select>
+//           </div>
+//         </div>
+//         <FormField label="Suspect Area *" type="text" value={form.suspectArea} onChange={(v) => set("suspectArea", v)} placeholder="Area/sistem yang diduga menjadi penyebab" />
+//         <div>
+//           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Indicated Issue *</label>
+//           <textarea value={form.indicatedIssue} onChange={(e) => set("indicatedIssue", e.target.value)} rows={4} placeholder="Jelaskan indikasi masalah / gejala incident yang terjadi..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400 resize-none" />
+//         </div>
+//         <div>
+//           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
+//           <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-colors">
+//             {selectedFile ? (
+//               <div className="space-y-3">
+//                 {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
+//                 <div className="flex items-center justify-between">
+//                   <div className="flex items-center gap-2 text-emerald-600">
+//                     <ImageIcon size={16} />
+//                     <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+//                     <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+//                   </div>
+//                   <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 p-1"><X size={16} /></button>
+//                 </div>
+//                 <p className="text-[11px] text-slate-400">File akan diupload saat tiket dikirim</p>
+//               </div>
+//             ) : (
+//               <label className="cursor-pointer block text-center">
+//                 <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
+//                   <Upload size={24} />
+//                   <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
+//                   <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
+//                 </div>
+//                 <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
+//               </label>
+//             )}
+//           </div>
+//         </div>
+//         <div className="flex gap-2 pt-2">
+//           <button onClick={handleSubmit} disabled={submitting}
+//             className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-xl text-[13px] font-bold"
+//             style={{ background: submitting ? "#f87171" : "#e11d48" }}>
+//             {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim...</> : <><Zap size={16} /> Laporkan Incident</>}
+//           </button>
+//           <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold">
+//             Batal
+//           </button>
+//         </div>
+//       </div>
+//     </ModalWrapper>
+//   );
+// }
 
 // ─── Shared Components ────────────────────────────────────────────────────────
 
