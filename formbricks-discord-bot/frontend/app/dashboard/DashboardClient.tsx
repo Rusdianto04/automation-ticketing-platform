@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -18,7 +18,7 @@ import { Filter, RefreshCw } from "lucide-react";
 
 interface IncidentRow {
   id: number;
-  type: "INCIDENT";
+  type: "INCIDENT" | "TICKETING";
   title: string;
   status: string;
   priority: string;
@@ -27,10 +27,13 @@ interface IncidentRow {
   indicated_issue: string;
   created_at: string;
   raw_created: string;
+  assignee: string;
+  summary: string;
 }
 
 interface Props {
   incidents: IncidentRow[];
+  allTickets: IncidentRow[];
   orgName: string;
   orgDepartment: string;
 }
@@ -100,12 +103,34 @@ async function uploadFileToServer(file: File): Promise<string> {
   if (!res.ok) throw new Error(data.error || "Gagal upload file");
   return data.url as string;
 }
+function normalizeStatusForDisplay(status: string, type: string): { label: string; style: React.CSSProperties } {
 
+  const inProgress = ["INVESTIGASI", "MITIGASI", "APPROVED", "IN_PROGRESS", "PENDING"];
+  const closed = ["RESOLVED", "DONE", "REJECT"];
+
+  if (inProgress.includes(status)) {
+    return {
+      label: "In Progress",
+      style: { background: "#eff6ff", color: "#1e40af", border: "1px solid #93c5fd" },
+    };
+  }
+  if (closed.includes(status)) {
+    return {
+      label: "Closed",
+      style: { background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1" },
+    };
+  }
+  // OPEN
+  return {
+    label: "Open",
+    style: { background: "#e0f2fe", color: "#0369a1", border: "1px solid #7dd3fc" },
+  };
+}
 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function DashboardClient({ incidents, orgName, orgDepartment }: Props) {
+export default function DashboardClient({ incidents, allTickets, orgName, orgDepartment }: Props) {
   const [searchId, setSearchId] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [searchResult, setSearchResult] = useState<null | { found: boolean; ticket?: Record<string, unknown> }>(null);
@@ -118,6 +143,9 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
   const [filterPriority, setFilterPriority] = useState<string>("ALL");
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("INCIDENT");
+
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -125,11 +153,39 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
     window.location.reload();
   }, []);
 
-  const filteredIncidents = incidents.filter((inc) => {
-    const statusMatch = filterStatus === "ALL" || inc.status === filterStatus;
-    const priorityMatch = filterPriority === "ALL" || inc.priority === filterPriority;
-    return statusMatch && priorityMatch;
-  });
+  const filteredIncidents = useMemo(() => {
+    const q = searchQuery.trim();
+
+    // Saat search aktif, pakai allTickets dan abaikan filter type
+    const source = q ? allTickets : (filterType === "TICKETING" ? allTickets : incidents);
+
+    return source.filter((inc) => {
+      // Type filter hanya berlaku saat TIDAK ada search query
+      const typeMatch = q ? true : (filterType === "ALL" || filterType === "INCIDENT"
+        ? inc.type === "INCIDENT"
+        : inc.type === "TICKETING");
+
+      const inProgress = ["INVESTIGASI", "MITIGASI", "APPROVED", "IN_PROGRESS", "PENDING"];
+      const closed = ["RESOLVED", "DONE", "REJECT"];
+      let normalizedStatus = "OPEN";
+      if (inProgress.includes(inc.status)) normalizedStatus = "IN_PROGRESS";
+      if (closed.includes(inc.status)) normalizedStatus = "CLOSED";
+
+      const statusMatch = filterStatus === "ALL" || normalizedStatus === filterStatus;
+
+      let searchMatch = true;
+      if (q) {
+        const numericQ = q.replace(/^#/, "");
+        if (/^\d+$/.test(numericQ)) {
+          searchMatch = inc.id === parseInt(numericQ, 10);
+        } else {
+          searchMatch = inc.title.toLowerCase().includes(q.toLowerCase());
+        }
+      }
+      return statusMatch && typeMatch && searchMatch;
+    });
+  }, [incidents, allTickets, filterStatus, filterType, searchQuery]);
+
 
 
   const handleSearchTicket = useCallback(async () => {
@@ -236,152 +292,152 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
         {/* ═══════════════════════════════════════════════════
               CARD 2 — Search Cek Status Tiket
           ═══════════════════════════════════════════════════ */}
-        <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8eaed" }}>
+        <div className="bg-white rounded-xl overflow-visible" style={{ border: "1px solid #e8eaed" }}>
 
-          {/* Header Card 2 */}
+          {/* Header Card */}
           <div
-            className="px-4 sm:px-5 py-3.5"
+            className="px-4 sm:px-5 py-3.5 relative"
             style={{ background: "#1e293b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
           >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              {/* Buat Ticket Support */}
+            <div className="flex items-center gap-2">
+
+              {/* Kiri: Buat Tiket Support */}
               <button
                 onClick={() => setModal("support")}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold text-white"
-                style={{ background: "#374151" }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
-                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold text-white shrink-0"
+                style={{ background: showFilter ? "#4b5563" : "#374151", border: "1px solid rgba(255,255,255,0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+                onMouseOut={(e) => !showFilter && (e.currentTarget.style.background = "#374151")}
               >
-                <Ticket size={14} />
+                <Ticket size={13} />
                 Buat Tiket Support
               </button>
-              {/* Search bar */}
-              <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto">
 
-                <div className="relative flex-1 sm:w-64">
+              {/* Kanan: Filter + Search */}
+              <div className="flex items-center gap-2 sm:ml-auto">
+
+                {/* Search */}
+                <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearchTicket()}
-                    placeholder="Masukkan ID tiket (contoh: 42)"
-                    className="w-full pl-8 pr-3 py-2 text-[12px] bg-white text-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari judul..."
+                    className="pl-8 pr-7 py-1.5 rounded-lg text-[12px] bg-white text-slate-700 focus:outline-none w-44"
                     style={{ border: "1px solid #d1d5db" }}
                   />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </div>
-                {/* Kanan: Filter + Refresh */}
-                {/* Filter dropdown */}
+
+                {/* Filter Button + Dropdown */}
                 <div className="relative">
                   <button
                     onClick={() => setShowFilter(!showFilter)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold text-white whitespace-nowrap"
-                    style={{ background: showFilter ? "#374151" : "#374151", border: "1px solid rgba(255,255,255,0.15)" }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white whitespace-nowrap"
+                    style={{ background: showFilter ? "#4b5563" : "#374151", border: "1px solid rgba(255,255,255,0.15)" }}
                     onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
-                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
+                    onMouseOut={(e) => !showFilter && (e.currentTarget.style.background = "#374151")}
                   >
                     <Filter size={12} />
                     Filter
-                    {(filterStatus !== "ALL" || filterPriority !== "ALL") && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 ml-0.5" />
+                    {(filterStatus !== "ALL" || filterType !== "ALL") && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
                     )}
                   </button>
 
                   {showFilter && (
-                    <div
-                      className="absolute right-0 top-full mt-1.5 bg-white rounded-xl shadow-lg z-20 p-3 space-y-3"
-                      style={{ border: "1px solid #e2e8f0", minWidth: 200 }}
-                    >
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {["ALL", "OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"].map((s) => (
-                            <button
-                              key={s}
-                              onClick={() => setFilterStatus(s)}
-                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors"
-                              style={{
-                                background: filterStatus === s ? "#1e293b" : "#f1f5f9",
-                                color: filterStatus === s ? "#fff" : "#64748b",
-                              }}
-                            >
-                              {s === "ALL" ? "Semua" : s}
-                            </button>
-                          ))}
+                    <>
+                      {/* Backdrop */}
+                      <div className="fixed inset-0 z-10" onClick={() => setShowFilter(false)} />
+
+                      {/* Dropdown */}
+                      <div
+                        className="absolute right-0 top-full mt-1.5 bg-white rounded-xl shadow-xl z-20 py-2"
+                        style={{ border: "1px solid #e2e8f0", minWidth: 180 }}
+                      >
+                        {/* Type */}
+                        <div className="px-3 pb-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tipe</p>
+                          <div className="space-y-0.5">
+                            {[
+                              { val: "INCIDENT", label: "Incident" },
+                              { val: "TICKETING", label: "Support" },
+                            ].map((o) => (
+                              <button
+                                key={o.val}
+                                onClick={() => setFilterType(o.val)}
+                                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] transition-colors"
+                                style={{
+                                  background: filterType === o.val ? "#f1f5f9" : "transparent",
+                                  color: filterType === o.val ? "#1e293b" : "#64748b",
+                                  fontWeight: filterType === o.val ? 600 : 400,
+                                }}
+                              >
+                                {o.label}
+                                {filterType === o.val && <CheckCircle2 size={12} className="text-indigo-500" />}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Priority</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {["ALL", "Critical", "High", "Medium", "Low"].map((p) => (
-                            <button
-                              key={p}
-                              onClick={() => setFilterPriority(p)}
-                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors"
-                              style={{
-                                background: filterPriority === p ? "#1e293b" : "#f1f5f9",
-                                color: filterPriority === p ? "#fff" : "#64748b",
-                              }}
-                            >
-                              {p === "ALL" ? "Semua" : p}
-                            </button>
-                          ))}
+
+                        {/* Divider */}
+                        <div className="h-px bg-slate-100 mx-3 my-1" />
+
+                        {/* Status */}
+                        <div className="px-3 pt-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                          <div className="space-y-0.5">
+                            {[
+                              { val: "ALL", label: "Semua Status" },
+                              { val: "OPEN", label: "Open" },
+                              { val: "IN_PROGRESS", label: "In Progress" },
+                              { val: "CLOSED", label: "Closed" },
+                            ].map((o) => (
+                              <button
+                                key={o.val}
+                                onClick={() => setFilterStatus(o.val)}
+                                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] transition-colors"
+                                style={{
+                                  background: filterStatus === o.val ? "#f1f5f9" : "transparent",
+                                  color: filterStatus === o.val ? "#1e293b" : "#64748b",
+                                  fontWeight: filterStatus === o.val ? 600 : 400,
+                                }}
+                              >
+                                {o.label}
+                                {filterStatus === o.val && <CheckCircle2 size={12} className="text-indigo-500" />}
+                              </button>
+                            ))}
+                          </div>
                         </div>
+
+                        {/* Reset */}
+                        {(filterStatus !== "ALL" || filterType !== "ALL") && (
+                          <>
+                            <div className="h-px bg-slate-100 mx-3 my-1" />
+                            <div className="px-3 pt-1 pb-1">
+                              <button
+                                onClick={() => { setFilterStatus("ALL"); setFilterType("ALL"); }}
+                                className="w-full text-[11px] text-red-500 hover:text-red-600 font-semibold text-center py-1 rounded-lg hover:bg-red-50 transition-colors"
+                              >
+                                Reset Filter
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
-                      {(filterStatus !== "ALL" || filterPriority !== "ALL") && (
-                        <button
-                          onClick={() => { setFilterStatus("ALL"); setFilterPriority("ALL"); }}
-                          className="w-full text-[10px] text-slate-400 hover:text-slate-600 text-center pt-1"
-                        >
-                          Reset filter
-                        </button>
-                      )}
-                    </div>
+                    </>
                   )}
                 </div>
-                {isSearchMode && (
-                  <button
-                    onClick={handleClearSearch}
-                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-600 whitespace-nowrap"
-                    style={{ background: "#f1f3f5", border: "1px solid #e2e8f0" }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = "#e2e8f0")}
-                    onMouseOut={(e) => (e.currentTarget.style.background = "#f1f3f5")}
-                  >
-                    <X size={12} />
-                    <span className="hidden sm:inline">Reset</span>
-                  </button>
-                )}
               </div>
             </div>
-
-            {/* Body Card 2 — hanya muncul setelah user melakukan search */}
-            {isSearchMode && (
-              <div className="p-4 sm:p-5">
-                {searchLoading ? (
-                  <div className="flex items-center justify-center gap-3 py-8 text-slate-400">
-                    <Loader2 size={22} className="animate-spin" />
-                    <p className="text-[13px]">Mencari tiket #{searchId}...</p>
-                  </div>
-                ) : searchResult === null ? null : !searchResult.found ? (
-                  <div
-                    className="flex items-start gap-3 rounded-xl px-4 py-4"
-                    style={{ background: "#fff5f5", border: "1px solid #fecaca" }}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <X size={15} className="text-red-600" />
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-bold text-red-700">Tiket #{searchId} tidak ditemukan</p>
-                      <p className="text-[11px] text-red-500 mt-0.5">
-                        Pastikan nomor ID tiket Anda benar. ID dapat ditemukan di email konfirmasi.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <TicketSearchResult ticket={searchResult.ticket!} />
-                )}
-              </div>
-            )}
           </div>
 
           {/* ═══════════════════════════════════════════════════
@@ -389,8 +445,9 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
               Setiap incident ditampilkan sebagai card TERPISAH
               (bukan tabel, bukan divisi, tapi card-card sendiri)
           ═══════════════════════════════════════════════════ */}
-          <div>
-            {/* Tidak ada judul section — langsung list card incident */}
+          {/* Tidak ada judul section — langsung list card incident */}
+
+          <div className="divide-y divide-slate-100">
             {filteredIncidents.length === 0 ? (
               /* Kosong */
               <div
@@ -425,7 +482,7 @@ export default function DashboardClient({ incidents, orgName, orgDepartment }: P
       {/* ── Footer ── */}
       <footer className="w-full bg-[#0f172a] text-white border-t border-white/10 mt-12">
         <div className="w-full px-4 py-2 text-center space-y-1">
-          <p className="text-[15px] text-white/70">
+          <p className="text-[12px] text-white/70">
             Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
           </p>
         </div>
@@ -450,7 +507,7 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
   return (
     <div
       onClick={onDetail}
-      className="block bg-white overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99] cursor-pointer"
+      className="block bg-dark overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99] cursor-pointer"
       style={{ border: "1px solid #e2e8f0", borderRadius: "10px" }}
     >
       {/* Flex row: konten kiri (flex-1) + panel kanan (tanggal + ⋮) */}
@@ -470,22 +527,8 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
             {/* Kolom: ID */}
             <div className="flex flex-col items-start gap-0.5 pr-4 border-r border-slate-100" style={{ minWidth: 44 }}>
               <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">ID</span>
-              <span
-                className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded"
-                style={{ color: "#1e293b", background: "#f1f5f9" }}
-              >
+              <span className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded" style={{ color: "#1e293b", background: "#f1f5f9" }}>
                 #{inc.id}
-              </span>
-            </div>
-
-            {/* Kolom: Status */}
-            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 90 }}>
-              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Status</span>
-              <span
-                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                style={STATUS_STYLE[inc.status] || DEFAULT_STATUS_STYLE}
-              >
-                {inc.status}
               </span>
             </div>
 
@@ -494,46 +537,55 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
               <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Type</span>
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                style={{ background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" }}
+                style={
+                  inc.type === "INCIDENT"
+                    ? { background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" }
+                    : { background: "#eff6ff", color: "#1e40af", border: "1px solid #93c5fd" }
+                }
               >
-                <AlertTriangle size={9} />
-                Incident
+                {inc.type === "INCIDENT"
+                  ? <><AlertTriangle size={9} /> Incident</>
+                  : <><Ticket size={9} /> Support</>
+                }
               </span>
             </div>
 
-            {/* Kolom: Priority */}
-            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 80 }}>
-              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Priority</span>
+            {/* Kolom: Status */}
+            <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 100 }}>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Status</span>
               <span
-                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${PRIORITY_COLORS[inc.priority] || "bg-slate-100 text-slate-600 border border-slate-200"
-                  }`}
+                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={normalizeStatusForDisplay(inc.status, inc.type).style}
               >
-                {inc.priority}
+                {normalizeStatusForDisplay(inc.status, inc.type).label}
               </span>
             </div>
 
-            {/* Kolom: Severity */}
-            {inc.severity && inc.severity !== "—" && (
+            {/* Kolom: Area (hanya incident) */}
+            {inc.type === "INCIDENT" && inc.suspect_area && inc.suspect_area !== "—" && (
               <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 100 }}>
-                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Severity</span>
-                <span
-                  className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                  style={{ background: "#f8fafc", color: "#64748b", border: "1px solid #e2e8f0" }}
-                >
-                  {inc.severity}
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Area</span>
+                <span className="text-[10px] text-slate-600 font-medium truncate w-full">{inc.suspect_area}</span>
+              </div>
+            )}
+
+            {/* Kolom: Petugas (hanya support) */}
+            {inc.type === "TICKETING" && (
+              <div className="flex flex-col items-start gap-0.5 px-4 border-r border-slate-100" style={{ minWidth: 120 }}>
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Petugas</span>
+                <span className="text-[10px] text-slate-600 font-medium truncate w-full">
+                  {inc.assignee && inc.assignee !== "—" ? inc.assignee : <span className="text-slate-300 italic">Belum assigned</span>}
                 </span>
               </div>
             )}
 
-            {/* Kolom: Area */}
-            {inc.suspect_area && inc.suspect_area !== "—" && (
-              <div className="flex flex-col items-start gap-0.5 px-4 flex-1 min-w-0">
-                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Area</span>
-                <span className="text-[10px] text-slate-600 font-medium truncate w-full">
-                  {inc.suspect_area}
-                </span>
-              </div>
-            )}
+            {/* Kolom: AI Summary */}
+            <div className="flex flex-col items-start gap-0.5 px-4 flex-1 min-w-0">
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Summary</span>
+              <span className="text-[10px] text-slate-500 italic truncate w-full">
+                {inc.summary || "Belum ada ringkasan"}
+              </span>
+            </div>
 
           </div>
         </div>
@@ -669,9 +721,9 @@ function TicketSearchResult({ ticket }: { ticket: Record<string, unknown> }) {
         <Link
           href={`/tickets/${String(ticket.id)}`}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold text-white transition-colors"
-          style={{ background: "#0f172a" }}
-          onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-          onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
+          style={{ background: "#374151" }}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
         >
           Lihat Detail Lengkap <ChevronRight size={12} />
         </Link>
@@ -722,11 +774,12 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
             </div>
             <div>
               <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Status</p>
+
               <span
-                className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-                style={STATUS_STYLE[incident.status] || DEFAULT_STATUS_STYLE}
+                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={normalizeStatusForDisplay(incident.status, incident.type).style}
               >
-                {incident.status}
+                {normalizeStatusForDisplay(incident.status, incident.type).label}
               </span>
             </div>
             <div>
@@ -746,9 +799,9 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
             <Link
               href={`/tickets/${incident.id}`}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors"
-              style={{ background: "#0f172a" }}
-              onMouseOver={(e) => (e.currentTarget.style.background = "#0a0f1a")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "#0f172a")}
+              style={{ background: "#374151" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
             >
               Lihat Detail Lengkap <ChevronRight size={14} />
             </Link>
@@ -760,9 +813,6 @@ function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onC
 }
 
 // ─── Support Form Modal — Multi-Slide dengan Auto-fill Email ─────────────────
-// Slide 1: Email (cek apakah sudah pernah isi sebelumnya via localStorage)
-// Slide 2: Nama, Divisi, No Telepon (auto-fill jika email dikenal)
-// Slide 3: Detail masalah (Ruangan, Lantai, Type, Issue, dll)
 
 const STORAGE_KEY = "sis_reporter_profile";
 
@@ -840,6 +890,12 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
     }
     setEmailError("");
 
+    // Reset data diri dulu sebelum cek profile
+    setReporterInfo("");
+    setDivision("");
+    setNoTelepon("");
+    setAutoFilled(false);
+
     // Auto-fill dari localStorage
     const profile = loadProfile(trimmed);
     if (profile) {
@@ -847,8 +903,6 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
       setDivision(profile.division);
       setNoTelepon(profile.noTelepon);
       setAutoFilled(true);
-    } else {
-      setAutoFilled(false);
     }
     setSlide(2);
   };
@@ -947,10 +1001,13 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
           </div>
           <p className="text-[15px] font-bold text-slate-800 mb-2">Tiket Berhasil Dibuat!</p>
           <p className="text-[13px] text-slate-600 mb-2">Nomor tiket Anda:</p>
-          <p className="text-3xl font-black text-indigo-600 mb-4">#{ticketId}</p>
+          <p className="text-3xl font-black text-slate-600 mb-4">#{ticketId}</p>
           <p className="text-[12px] text-slate-500 mb-6">Simpan nomor tiket ini untuk mengecek status.</p>
           <div className="flex gap-2 justify-center">
-            <Link href={`/tickets/${ticketId}`} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-semibold transition-colors">
+            <Link href={`/tickets/${ticketId}`} className="px-4 py-2 text-white rounded-lg text-[13px] font-semibold transition-colors"
+              style={{ background: "#374151" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}>
               Lihat Detail Tiket
             </Link>
             <button onClick={onClose} className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-[13px] font-semibold transition-colors">
@@ -978,7 +1035,7 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
               >
                 {s < slide ? <CheckCircle2 size={14} /> : s}
               </div>
-              <div className="text-[10px] font-semibold hidden sm:block" style={{ color: s === slide ? "#4f46e5" : "#94a3b8" }}>
+              <div className="text-[10px] font-semibold hidden sm:block" style={{ color: s === slide ? "#374151" : "#94a3b8" }}>
                 {s === 1 ? "Email" : s === 2 ? "Data Diri" : "Detail Masalah"}
               </div>
               {s < TOTAL_SLIDES && (
@@ -1018,8 +1075,8 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
               onClick={handleSlide1Next}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-[13px] font-bold"
               style={{ background: "#374151" }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
-                    onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
             >
               Lanjut <ChevronRight size={15} />
             </button>
@@ -1124,7 +1181,9 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
               onClick={handleSubmit}
               disabled={submitting}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-[13px] font-bold"
-              style={{ background: submitting ? "#818cf8" : "#4f46e5" }}
+              style={{ background: "#374151" }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
             >
               {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim Tiket...</> : <><Ticket size={16} /> Kirim Tiket Support</>}
             </button>
@@ -1134,180 +1193,6 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
     </ModalWrapper>
   );
 }
-
-// ─── Incident Form Modal ──────────────────────────────────────────────────────
-
-// function IncidentFormModal({ onClose }: { onClose: () => void }) {
-//   const now = new Date().toLocaleString("id-ID", {
-//     timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short",
-//   });
-
-//   const [form, setForm] = useState({
-//     incidentTitle: "",
-//     priorityIncident: "", severityIncident: "",
-//     suspectArea: "", indicatedIssue: "",
-//   });
-
-//   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-//   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-//   const fileInputRef = useRef<HTMLInputElement>(null);
-//   const [submitting, setSubmitting] = useState(false);
-//   const [success, setSuccess] = useState(false);
-//   const [ticketId, setTicketId] = useState<number | null>(null);
-//   const [error, setError] = useState("");
-
-//   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
-
-//   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     const file = e.target.files?.[0];
-//     if (!file) return;
-//     const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
-//     if (!allowed.includes(file.type)) { setError("Tipe file tidak didukung. Gunakan: JPG, PNG, GIF, WEBP"); return; }
-//     if (file.size > 5 * 1024 * 1024) { setError("Ukuran file maksimal 5MB"); return; }
-//     setError("");
-//     setSelectedFile(file);
-//     if (previewUrl) URL.revokeObjectURL(previewUrl);
-//     setPreviewUrl(URL.createObjectURL(file));
-//   };
-
-//   const handleRemoveFile = () => {
-//     setSelectedFile(null);
-//     if (previewUrl) URL.revokeObjectURL(previewUrl);
-//     setPreviewUrl(null);
-//     if (fileInputRef.current) fileInputRef.current.value = "";
-//   };
-
-//   const handleSubmit = async () => {
-//     if (!form.incidentTitle || !form.priorityIncident || !form.severityIncident ||
-//       !form.suspectArea || !form.indicatedIssue) {
-//       setError("Harap isi semua field yang wajib diisi (*)");
-//       return;
-//     }
-//     setError("");
-//     setSubmitting(true);
-//     try {
-//       let attachmentUrl: string | null = null;
-//       if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
-
-//       const formFields: Record<string, string> = {
-//         "Incident Title": form.incidentTitle,
-//         "Incident Information": form.incidentTitle,
-//         "Date & Time Incident": now,
-//         "Priority Incident": form.priorityIncident,
-//         "Severity Incident": form.severityIncident,
-//         "Suspect Area": form.suspectArea,
-//         "Indicated Issue": form.indicatedIssue,
-//       };
-//       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
-
-//       const res = await fetch("/api/tickets/create", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ type: "INCIDENT", formFields, createdBy: "static_portal" }),
-//       });
-//       const data = await res.json();
-//       if (!res.ok) throw new Error(data.error || "Gagal membuat tiket");
-//       setTicketId(data.ticketId);
-//       setSuccess(true);
-//     } catch (e: unknown) {
-//       setError(e instanceof Error ? e.message : "Terjadi kesalahan");
-//     } finally {
-//       setSubmitting(false);
-//     }
-//   };
-
-//   if (success) {
-//     return (
-//       <ModalWrapper title="Incident Berhasil Dilaporkan" onClose={onClose}>
-//         <div className="text-center py-4">
-//           <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
-//             <Zap size={32} className="text-rose-600" />
-//           </div>
-//           <p className="text-[15px] font-bold text-slate-800 mb-2">Incident Berhasil Dilaporkan!</p>
-//           <p className="text-[13px] text-slate-600 mb-2">Nomor tiket incident Anda:</p>
-//           <p className="text-3xl font-black text-rose-600 mb-4">#{ticketId}</p>
-//           <p className="text-[12px] text-slate-500 mb-6">Tim IT akan segera menangani incident ini.</p>
-//           <div className="flex gap-2 justify-center">
-//             <Link href={`/tickets/${ticketId}`} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors">
-//               Lihat Detail Tiket
-//             </Link>
-//             <button onClick={onClose} className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-[13px] font-semibold transition-colors">
-//               Tutup
-//             </button>
-//           </div>
-//         </div>
-//       </ModalWrapper>
-//     );
-//   }
-
-//   return (
-//     <ModalWrapper title="Laporkan Incident" onClose={onClose}>
-//       <div className="space-y-4">
-//         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
-//         <FormField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident yang terjadi" />
-//         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-//           <div>
-//             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Priority Incident *</label>
-//             <select value={form.priorityIncident} onChange={(e) => set("priorityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
-//               <option value="">-- Pilih Priority --</option>
-//               {PRIORITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-//             </select>
-//           </div>
-//           <div>
-//             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Severity Incident *</label>
-//             <select value={form.severityIncident} onChange={(e) => set("severityIncident", e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400">
-//               <option value="">-- Pilih Severity --</option>
-//               {SEVERITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-//             </select>
-//           </div>
-//         </div>
-//         <FormField label="Suspect Area *" type="text" value={form.suspectArea} onChange={(v) => set("suspectArea", v)} placeholder="Area/sistem yang diduga menjadi penyebab" />
-//         <div>
-//           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Indicated Issue *</label>
-//           <textarea value={form.indicatedIssue} onChange={(e) => set("indicatedIssue", e.target.value)} rows={4} placeholder="Jelaskan indikasi masalah / gejala incident yang terjadi..." className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400 resize-none" />
-//         </div>
-//         <div>
-//           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
-//           <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-colors">
-//             {selectedFile ? (
-//               <div className="space-y-3">
-//                 {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
-//                 <div className="flex items-center justify-between">
-//                   <div className="flex items-center gap-2 text-emerald-600">
-//                     <ImageIcon size={16} />
-//                     <span className="text-[13px] font-medium truncate max-w-[200px]">{selectedFile.name}</span>
-//                     <span className="text-[11px] text-slate-400">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-//                   </div>
-//                   <button onClick={handleRemoveFile} className="text-red-500 hover:text-red-700 p-1"><X size={16} /></button>
-//                 </div>
-//                 <p className="text-[11px] text-slate-400">File akan diupload saat tiket dikirim</p>
-//               </div>
-//             ) : (
-//               <label className="cursor-pointer block text-center">
-//                 <div className="flex flex-col items-center gap-2 text-slate-400 py-2">
-//                   <Upload size={24} />
-//                   <p className="text-[13px]">Klik untuk pilih gambar atau screenshot</p>
-//                   <p className="text-[11px]">JPG, PNG, GIF, WEBP — Maks 5MB</p>
-//                 </div>
-//                 <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-//               </label>
-//             )}
-//           </div>
-//         </div>
-//         <div className="flex gap-2 pt-2">
-//           <button onClick={handleSubmit} disabled={submitting}
-//             className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-xl text-[13px] font-bold"
-//             style={{ background: submitting ? "#f87171" : "#e11d48" }}>
-//             {submitting ? <><Loader2 size={16} className="animate-spin" /> Mengirim...</> : <><Zap size={16} /> Laporkan Incident</>}
-//           </button>
-//           <button onClick={onClose} className="px-4 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[13px] font-semibold">
-//             Batal
-//           </button>
-//         </div>
-//       </div>
-//     </ModalWrapper>
-//   );
-// }
 
 // ─── Shared Components ────────────────────────────────────────────────────────
 
