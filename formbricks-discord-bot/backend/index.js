@@ -41,6 +41,9 @@ const chatbotRoute   = require("./src/routes/chatbot.route");
 const knowledgeRoute = require("./src/routes/knowledge.route");
 const reportRoute    = require("./src/routes/report.route");
 const webRoute       = require("./src/routes/web.route");
+// ------------
+const recommendRoute    = require("./src/routes/recommendation.route");  // ✅ TAMBAH
+const incidentRoute     = require("./src/routes/incident.route");        // ✅ TAMBAH
 
 // Discord Handlers
 const ChatbotHandler = require("./src/handlers/chatbot.handler");
@@ -93,6 +96,8 @@ app.use("/api/tickets",   ticketRoute);
 app.use("/api/chatbot",   chatbotRoute);
 app.use("/api/knowledge", knowledgeRoute);
 app.use("/api/report",    reportRoute);
+app.use("/api/recommend", recommendRoute);
+app.use("/api/incident",  incidentRoute);
 app.use("/",              webRoute);    // health + redirect ke frontend
 
 // ── Global Error Handler ──────────────────────────────────────────────────────

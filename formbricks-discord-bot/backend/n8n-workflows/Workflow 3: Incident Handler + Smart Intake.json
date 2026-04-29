@@ -1,0 +1,467 @@
+{
+  "name": "Workflow 3: Incident Handler + Smart Intake (Production v9)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "inc-wh-01",
+      "name": "Webhook: Incident Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "incident-event-handler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// PARSE & CLASSIFY INCIDENT EVENT — v9\n//\n// SUMBER TICKET (form_id di DB):\n//   - 'static_portal'   : form statis di web portal Next.js\n//   - 'formbricks'      : Formbricks webhook (FORM_ID_TICKETING / FORM_ID_INCIDENT)\n//   - 'admin_portal'    : dibuat manual oleh admin\n//   - 'chatbot_auto_create': dibuat oleh AI chatbot Discord\n//\n// JENIS EVENT:\n//   ticket_created    — tiket baru (dari webhook.route.js atau portal)\n//   status_update     — teknisi update status via Discord/admin panel\n//   manual_broadcast  — admin push manual ke Discord\n//\n// DETEKSI INCIDENT:\n//   - type='INCIDENT' → otomatis incident\n//   - type='TICKETING' + keyword kritis → auto-detect sebagai incident\n// ================================================================\nconst body = $input.item.json.body || $input.item.json;\n\nconst eventType  = (body.eventType  || 'ticket_created').toLowerCase();\nconst ticketId   = Number(body.ticketId || body.ticket_id || 0);\nconst ticketType = (body.ticketType || body.type || '').toUpperCase();\nconst newStatus  = (body.status     || '').toUpperCase();\nconst note       = body.note        || '';\nconst formId     = body.formId      || body.form_id || 'unknown';\nconst formFields = body.formFields  || body.form_fields || {};\n\nif (!ticketId || isNaN(ticketId)) {\n  console.log('[INC] Skip: no valid ticketId');\n  return [{ json: { skip: true, reason: 'no ticketId' } }];\n}\n\n// ── Sumber form (hanya untuk logging/info, tidak mempengaruhi logika) ────────\nconst SOURCE_LABELS = {\n  'static_portal':       'Web Portal (Static Form)',\n  'formbricks':          'Formbricks',\n  'admin_portal':        'Admin Panel',\n  'chatbot_auto_create': 'Discord Chatbot',\n};\n// Formbricks form ID bisa berupa ID panjang, normalize ke label\nconst knownFormbricksIds = [\n  'zcp7cbqqrtavbyd6wwkmk2vx',  // FORM_ID_TICKETING default\n  'cmiobkjfm2piqad012scz1yxf', // FORM_ID_INCIDENT default\n];\nlet sourceLabel = SOURCE_LABELS[formId] || formId;\nif (knownFormbricksIds.includes(formId) || formId.length > 15) {\n  sourceLabel = 'Formbricks';\n}\n\n// ── Keyword-based incident auto-detection ────────────────────────────────────\nconst INCIDENT_KW = [\n  'down','outage','mati','tidak bisa','gangguan total','semua user','seluruh',\n  'parah','kritis','critical','server','network','jaringan','database',\n  'internet mati','tidak ada koneksi','offline','fail','failure'\n];\n\nconst issueText = [\n  formFields['Incident Information'] || '',\n  formFields['Incident Title']       || '',\n  formFields['Issue']                || '',\n  formFields['Indicated Issue']      || '',\n].join(' ').toLowerCase();\n\nconst autoDetected = ticketType === 'TICKETING' &&\n  INCIDENT_KW.some(kw => issueText.includes(kw));\n\n// ── Category detection ───────────────────────────────────────────────────────\nconst CATEGORIES = {\n  network:     ['network','internet','jaringan','koneksi','wifi','lan','vpn'],\n  system:      ['server','database','db','storage','os','windows','linux','backup'],\n  application: ['aplikasi','app','web','portal','login','error','crash','bug'],\n  hardware:    ['hardware','printer','komputer','pc','laptop','monitor','ups'],\n  security:    ['security','hack','virus','ransomware','breach','akses tidak sah'],\n};\nconst suspectArea = (formFields['Suspect Area'] || '').toLowerCase();\nlet category = 'general';\nfor (const [cat, kws] of Object.entries(CATEGORIES)) {\n  if (kws.some(kw => issueText.includes(kw) || suspectArea.includes(kw))) {\n    category = cat;\n    break;\n  }\n}\n\nconst isIncidentTicket = ticketType === 'INCIDENT' || autoDetected;\n\nconsole.log(`[INC] eventType=${eventType} | ticketId=#${ticketId} | type=${ticketType} | source=${sourceLabel} | isIncident=${isIncidentTicket} | category=${category} | autoDetected=${autoDetected}`);\n\nreturn [{ json: {\n  skip:          false,\n  eventType,\n  ticketId,\n  ticketType,\n  newStatus,\n  note,\n  formId,\n  sourceLabel,\n  formFields,\n  category,\n  isIncidentTicket,\n  autoDetected,\n} }];"
+      },
+      "id": "inc-parse-02",
+      "name": "Parse & Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "inc-skip-gate-03",
+      "name": "Valid Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"handled\": false, \"reason\": \"Skipped — invalid or non-incident\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inc-skip-resp-04",
+      "name": "Respond: Skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "is-incident-check",
+              "leftValue": "={{ $json.isIncidentTicket }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "inc-gate-05",
+      "name": "Is Incident?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"handled\": false, \"reason\": \"Not classified as incident\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inc-not-inc-06",
+      "name": "Respond: Not Incident",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "status_update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "output": 0
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "manual_broadcast",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "output": 1
+            }
+          ]
+        },
+        "fallbackOutput": 2
+      },
+      "id": "inc-route-07",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:3000/api/incident/{{ $('Parse & Classify').item.json.ticketId }}/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "automation_ticketing01_incident02"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "={{ $('Parse & Classify').item.json.newStatus }}"
+            },
+            {
+              "name": "note",
+              "value": "={{ $('Parse & Classify').item.json.note }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "inc-status-08",
+      "name": "API: Update Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:3000/api/incident/{{ $('Parse & Classify').item.json.ticketId }}/broadcast",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "automation_ticketing01_incident02"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "note",
+              "value": "={{ $('Parse & Classify').item.json.note }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "inc-broadcast-09",
+      "name": "API: Manual Broadcast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://backend:3000/api/ticket/{{ $('Parse & Classify').item.json.ticketId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "automation_ticketing01_incident02"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 8000
+        }
+      },
+      "id": "inc-fetch-10",
+      "name": "Fetch Ticket Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// BUILD INCIDENT DISCORD MESSAGE — v9\n// Menampilkan source form agar teknisi tahu asal tiket\n// ================================================================\nconst parsed = $('Parse & Classify').item.json;\n\n// Gabungkan hasil dari semua branch\nlet ticket = null;\ntry { ticket = $('API: Update Status').item.json.ticket; } catch (_) {}\ntry { if (!ticket) ticket = $('API: Manual Broadcast').item.json.ticket; } catch (_) {}\ntry {\n  if (!ticket) {\n    const fetched = $('Fetch Ticket Detail').item.json;\n    ticket = fetched.ticket || null;\n  }\n} catch (_) {}\n\nconst STATUS_LABELS = {\n  OPEN:        '🔴 Open',\n  INVESTIGASI: '🟡 Investigating',\n  MITIGASI:    '🟠 Mitigating',\n  RESOLVED:    '🟢 Resolved',\n  DONE:        '🟢 Resolved',\n};\n\nconst ff          = ticket?.formFields || ticket?.form_fields || parsed.formFields || {};\nconst status      = ticket?.status || ticket?.statusPengusulan || 'OPEN';\nconst statusLabel = STATUS_LABELS[status.toUpperCase()] || '🔴 Open';\nconst title       = ff['Incident Title'] || ff['Incident Information'] || `Incident #${parsed.ticketId}`;\nconst priority    = ff['Priority Incident'] || 'Medium';\nconst severity    = ff['Severity Incident'] || 'Medium';\nconst suspectArea = ff['Suspect Area'] || '-';\nconst note        = parsed.note || '';\nconst source      = parsed.sourceLabel || parsed.formId || 'Unknown';\nconst autoDetectedNote = parsed.autoDetected ? '\\n⚠️ *Auto-detected dari ticket SUPPORT*' : '';\n\nconst discordMsg = [\n  '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n  `🚨 **INCIDENT ${parsed.eventType === 'status_update' ? 'STATUS UPDATE' : 'BROADCAST'} — #${parsed.ticketId}**`,\n  '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n  `**Title      :** ${title}`,\n  `**Status     :** ${statusLabel}`,\n  `**Category   :** ${parsed.category.toUpperCase()}`,\n  `**Priority   :** ${priority}`,\n  `**Severity   :** ${severity}`,\n  `**Suspect    :** ${suspectArea}`,\n  `**Source     :** ${source}`,\n  note ? `\\n📝 **Update:** ${note}` : '',\n  autoDetectedNote,\n  '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',\n].filter(Boolean).join('\\n');\n\nconsole.log(`[INC] Built message for #${parsed.ticketId} | source=${source} | status=${status}`);\n\nreturn [{ json: {\n  ticketId:    parsed.ticketId,\n  category:    parsed.category,\n  status,\n  statusLabel,\n  sourceLabel: source,\n  discordMsg,\n  eventType:   parsed.eventType,\n  ok:          true,\n} }];"
+      },
+      "id": "inc-build-11",
+      "name": "Build Incident Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"handled\": true,\n  \"ticketId\":   {{ $json.ticketId }},\n  \"status\":     \"{{ $json.status }}\",\n  \"category\":   \"{{ $json.category }}\",\n  \"sourceLabel\":\"{{ $json.sourceLabel }}\",\n  \"discordMsg\":  {{ JSON.stringify($json.discordMsg) }}\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "inc-respond-12",
+      "name": "Respond: Incident Handled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Incident Event": {
+      "main": [
+        [
+          {
+            "node": "Parse & Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Classify": {
+      "main": [
+        [
+          {
+            "node": "Valid Input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Input?": {
+      "main": [
+        [
+          {
+            "node": "Respond: Skip",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Incident?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Incident?": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Not Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "API: Update Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API: Manual Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Ticket Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Update Status": {
+      "main": [
+        [
+          {
+            "node": "Build Incident Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Manual Broadcast": {
+      "main": [
+        [
+          {
+            "node": "Build Incident Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ticket Detail": {
+      "main": [
+        [
+          {
+            "node": "Build Incident Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Incident Message": {
+      "main": [
+        [
+          {
+            "node": "Respond: Incident Handled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
+  },
+  "staticData": null,
+  "tags": [
+    "incident",
+    "github-status",
+    "v9"
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
