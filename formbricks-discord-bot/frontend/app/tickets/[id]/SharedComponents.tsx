@@ -42,23 +42,35 @@ export function TypeBadge({ type }: { type: TicketType | string }) {
 
 // ── Card Section ──────────────────────────────────────────────────────────────
 export function CardSection({
-  title, icon, accent, children,
+  title,
+  header,
+  icon,
+  children,
 }: {
-  title: string;
+  title?: string;
+  header?: React.ReactNode;
   icon?: React.ReactNode;
-  accent?: "indigo" | "rose";
   children: React.ReactNode;
 }) {
-  const headerColor = "text-white ";
-
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className={`px-4 py-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider ${headerColor}`} style={{ background: "#1e293b" }}>
-        {icon}
-        {title}
+      
+      {/* HEADER */}
+      <div
+        className="px-4 py-3 flex items-center justify-between text-[13px] font-semibold text-white"
+        style={{ background: "#1e293b" }}
+      >
+        {header ? (
+          header
+        ) : (
+          <div className="flex items-center gap-2">
+            {icon}
+            {title}
+          </div>
+        )}
       </div>
-      <div className="p-0">{children}</div>
+
+      <div>{children}</div>
     </div>
   );
 }
