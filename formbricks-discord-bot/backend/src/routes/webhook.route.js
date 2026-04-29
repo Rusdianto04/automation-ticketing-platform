@@ -25,6 +25,8 @@ const DiscordService  = require("../services/discord.service");
 const { sendEmail, buildConfirmationEmail } = require("../services/email.service");
 const { normalizeTicket, cleanValue } = require("../utils/ticket");
 const { getPublicUrl } = require("../utils/network");
+const RecommendationService = require("../services/recommendation.service"); 
+const IncidentService       = require("../services/incident.service");      
 
 // Static Form field names (digunakan oleh static portal — tanpa Formbricks)
 const STATIC_TICKETING_FIELDS = [
@@ -96,6 +98,28 @@ function extractEmailRecipient(formFields, rawAnswers) {
   }
 
   return null;
+}
+
+function buildRecommendationMsg(result) {
+  if (!result?.found) return null;
+  const lines = [];
+  lines.push("💡 **SMART RECOMMENDATION**");
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  if (result.similarTickets?.length > 0) {
+    lines.push(`📋 **Kasus Serupa (${result.similarTickets.length}):**`);
+    result.similarTickets.slice(0, 3).forEach((t) => {
+      lines.push(`  • **#${t.ticketId}** — ${(t.title || t.issue || "").substring(0, 80)}`);
+      if (t.summary) lines.push(`    ↳ ${String(t.summary).substring(0, 150)}`);
+    });
+  }
+  const top = result.topSuggestion;
+  if (top?.summary) lines.push(`\n✅ **Solusi Referensi:**\n${String(top.summary).substring(0, 300)}`);
+  if (result.runbooks?.length > 0) {
+    lines.push(`\n📖 **Runbook:**`);
+    result.runbooks.slice(0, 2).forEach((r) => lines.push(`  • [${r.category}] ${r.title}`));
+  }
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  return lines.join("\n");
 }
 
 // ─── Route ───────────────────────────────────────────────────────────────────
@@ -204,6 +228,39 @@ router.post("/formbricks", async (req, res) => {
     } catch (_) {}
   }
 
+  // ── Step 5.5: Smart Intake — Recommendation + Incident (non-blocking) ────
+  let recommendationResult = { found: false, similarTickets: [], runbooks: [], topSuggestion: null };
+  try {
+    const issueText = type === "INCIDENT"
+      ? (formFields["Incident Information"] || formFields["Incident Title"] || "")
+      : (formFields["Issue"] || "");
+    if (issueText.trim()) {
+      recommendationResult = await RecommendationService.getRecommendation({
+        issueText,
+        keywords: ticket.searchKeywords || ticket.search_keywords || [],
+        type,
+      });
+      if (recommendationResult.found && discordResult.ok && discordResult.threadId) {
+        try {
+          const thread = await DiscordService.getClient().channels.fetch(discordResult.threadId);
+          if (thread?.isThread()) {
+            const recMsg = buildRecommendationMsg(recommendationResult);
+            if (recMsg) await thread.send(recMsg);
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+
+  let incidentResult = { detected: false, category: "general" };
+  try {
+    const analysis = IncidentService.analyzeForIncident(ticket);
+    if (analysis.isIncident) {
+      incidentResult = { detected: true, category: analysis.category };
+      IncidentService.processIncident(ticket).catch(() => {});
+    }
+  } catch (_) {}
+
   // ── Step 6: Send confirmation email (SELALU — terlepas dari Discord) ──────
   // FIX: Email dijalankan SETELAH Discord block (sukses maupun gagal)
   // sehingga email selalu terkirim ke pelapor
@@ -230,6 +287,12 @@ router.post("/formbricks", async (req, res) => {
     thread:     discordResult.threadUrl,
     discord:    discordResult.ok,
     emailSent:  !!emailTo,
+    recommendation: {
+      found:        recommendationResult.found,
+      similarCount: recommendationResult.similarTickets.length,
+      runbookCount: recommendationResult.runbooks.length,
+    },
+    incident: incidentResult,
   });
 });
 
