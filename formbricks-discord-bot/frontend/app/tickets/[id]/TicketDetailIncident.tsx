@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ArrowLeft
-} from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import type { Ticket } from "@/types";
 import { CardSection, TimelineSection } from "./SharedComponents";
 
@@ -32,30 +30,46 @@ export default function TicketDetailIncident({
 
       {/* ── Header ── */}
       <header
-        className="text-white shadow-lg"
-        style={{ background: "#1e293b" }}
+        className="text-white sticky top-0 z-30"
+        style={{
+          background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}
       >
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 h-16">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 text-[13px] font-medium transition-all group"
-            >
-              <ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
-              Kembali ke Dashboard
-            </Link>
-            <span className="text-slate-600">›</span>
-            <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-[14px]">#{ticket.id}</span>
+        <div className="w-full px-5 sm:px-8 lg:px-10">
+          <div className="flex items-center justify-between h-20 relative">
+
+            {/* ── KIRI: BACK + ID ── */}
+            <div className="flex items-center gap-2 text-[13px]">
+
+              {/* BACK */}
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1.5 text-slate-300 hover:text-white transition"
+              >
+                <ArrowLeft size={15} />
+                Kembali ke Dashboard
+              </Link>
+
+              {/* SEPARATOR */}
+              <ChevronRight size={14} className="text-slate-500" />
+
+              {/* ID */}
+              <span className="font-mono text-indigo-300">
+                #{ticket.id}
+              </span>
+
             </div>
-            <div className="ml-auto text-right hidden sm:block">
-              <p className="text-[11px] text-white font-semibold">{orgName}</p>
-              <p className="text-[11px] text-white/80">{orgDepartment}</p>
+
+            {/* ── KANAN: ORG ── */}
+            <div className="text-right">
+              <p className="text-[12px] font-semibold">{orgName}</p>
+              <p className="text-[11px] text-slate-400">{orgDepartment}</p>
             </div>
+
           </div>
         </div>
       </header>
-
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
         <div className="max-w-screen-xl mx-auto space-y-5">

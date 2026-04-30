@@ -225,8 +225,6 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#d9e1f2" }}>
 
-
-
       {/* ═══════════════════════════════════════════════════════
           HEADER — Diperbesar: h-20 (80px), logo lebih besar
       ════════════════════════════════════════════════════════ */}
