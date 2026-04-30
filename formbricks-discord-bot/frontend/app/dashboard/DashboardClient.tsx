@@ -223,7 +223,7 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
   const isSearchMode = searchId !== "";
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#d9e1f2" }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#e8eaed" }}>
 
       {/* ═══════════════════════════════════════════════════════
           HEADER — Diperbesar: h-20 (80px), logo lebih besar
@@ -473,11 +473,18 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
       </main>
 
       {/* ── Footer ── */}
-      <footer className="w-full bg-[#0f172a] text-white border-t border-white/10 mt-12">
-        <div className="w-full px-4 py-2 text-center space-y-1">
-          <p className="text-[12px] text-white/70">
+
+      <footer className="w-full py-8">
+        <div className="flex flex-col items-center justify-center gap-3">
+
+          {/* GARIS GRADIENT + FADE */}
+          <div className="w-40 h-[2px] bg-gradient-to-r from-transparent via-slate-500/60 to-transparent animate-fadeIn"></div>
+
+          {/* TEXT */}
+          <p className="text-[12px] text-slate-500/80 tracking-wider">
             Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
           </p>
+
         </div>
       </footer>
       {modal === "support" && <SupportFormModal onClose={() => setModal(null)} />}
@@ -1097,11 +1104,11 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </div>
-        
+
       )}
-      
+
     </ModalWrapper>
-    
+
   );
 }
 
