@@ -26,7 +26,7 @@ export default function TicketDetailIncident({
   const incidentTitle = (f["Incident Title"] as string) || (f["Incident Information"] as string) || title;
 
   return (
-    <div className="min-h-screen" style={{ background: "#d9e1f2" }}>
+    <div className="min-h-screen flex flex-col" style={{ background: "#e8eaed" }}>
 
       {/* ── Header ── */}
       <header
@@ -70,7 +70,7 @@ export default function TicketDetailIncident({
           </div>
         </div>
       </header>
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
 
         <div className="max-w-screen-xl mx-auto space-y-5">
           {/* ── LEFT ── */}
@@ -138,12 +138,25 @@ export default function TicketDetailIncident({
               </table>
             </CardSection>
 
-
           </div>
-
 
         </div>
       </main>
+
+      {/* ── Footer ── */}
+      <footer className="w-full py-8">
+        <div className="flex flex-col items-center justify-center gap-3">
+
+          {/* GARIS GRADIENT + FADE */}
+          <div className="w-40 h-[2px] bg-gradient-to-r from-transparent via-slate-500/60 to-transparent animate-fadeIn"></div>
+
+          {/* TEXT */}
+          <p className="text-[12px] text-slate-500/80 tracking-wider">
+            Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
+          </p>
+
+        </div>
+      </footer>
     </div>
   );
 }

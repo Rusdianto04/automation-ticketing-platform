@@ -170,3 +170,19 @@ a, button { transition: all 0.15s ease; }
 .animate-slide-up { animation: slideUp 0.4s ease-out; }
 .animate-spin     { animation: spin    1s linear infinite; }
 .animate-pulse    { animation: pulse   2s ease-in-out infinite; }
+
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.8s ease forwards;
+}

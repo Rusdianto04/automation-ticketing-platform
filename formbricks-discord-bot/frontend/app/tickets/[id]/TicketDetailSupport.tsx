@@ -27,8 +27,7 @@ export default function TicketDetailSupport({
   const timelineRaw = ticket.timeline_tindak_lanjut || null;
 
   return (
-    <div className="min-h-screen" style={{ background: "#d9e1f2" }}>
-
+    <div className="min-h-screen flex flex-col" style={{ background: "#e8eaed" }}>
       {/* ── Header ── */}
       <header
         className="text-white sticky top-0 z-30"
@@ -72,87 +71,105 @@ export default function TicketDetailSupport({
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
         {/* ── LEFT ── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="max-w-screen-xl mx-auto space-y-5">
 
-          {/* ── Data Formulir Support — Issue masuk ke dalam tabel ── */}
-          <CardSection
-            header={
-              <div className="w-full text-center py-2">
-                <h1 className="text-[20px] font-bold text-white">
-                  {title}
-                </h1>
-                <p className="text-[12px] text-white/70 mt-1">
-                  Ticket Report
-                </p>
-              </div>
-            }
-          >
-            <table className="w-full text-[13px]">
-              <tbody className="divide-y divide-slate-100">
+          <div className="space-y-5">
 
-                {/* ── CONTEXT INFO (NEW) ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
+            {/* ── Data Formulir Support — Issue masuk ke dalam tabel ── */}
+            <CardSection
+              header={
+                <div className="w-full text-center py-2">
+                  <h1 className="text-[20px] font-bold text-white">
+                    {title}
+                  </h1>
+                  <p className="text-[12px] text-white/70 mt-1">
+                    Ticket Report
+                  </p>
+                </div>
+              }
+            >
+              <table className="w-full text-[13px]">
+                <tbody className="divide-y divide-slate-100">
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
+                  {/* ── CONTEXT INFO (NEW) ── */}
+                  <tr>
+                    <td colSpan={2} className="px-5 py-5">
 
-                      <InfoBlock label="Reporter" value={requester} />
-                      <InfoBlock label="Division" value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                      <InfoBlock label="ID Device" value={f["ID Device"] as string} />
-                      <InfoBlock label="Type of Support" value={(f["Type of Support Requested"] || f["Kategori"]) as string} />
-                      <InfoBlock label="Status" value={<StatusBadge status={status} />} />
-                      <InfoBlock label="Petugas" value={<AssigneeInline assignees={assignees} />} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
 
-                    </div>
+                        <InfoBlock label="Reporter" value={requester} />
+                        <InfoBlock label="Division" value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
+                        <InfoBlock label="ID Device" value={f["ID Device"] as string} />
+                        <InfoBlock label="Type of Support" value={(f["Type of Support Requested"] || f["Kategori"]) as string} />
+                        <InfoBlock label="Status" value={<StatusBadge status={status} />} />
+                        <InfoBlock label="Petugas" value={<AssigneeInline assignees={assignees} />} />
 
-                  </td>
-                </tr>
+                      </div>
 
-                {/* ── SUMMARY ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                      Summary
-                    </h3>
+                    </td>
+                  </tr>
 
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                      {summaryTicket || "Ringkasan belum tersedia."}
-                    </p>
-                  </td>
-                </tr>
+                  {/* ── SUMMARY ── */}
+                  <tr>
+                    <td colSpan={2} className="px-5 py-5">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                        Summary
+                      </h3>
 
-                {/* ── ROOT CAUSE ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                      Root Cause
-                    </h3>
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                        {summaryTicket || "Ringkasan belum tersedia."}
+                      </p>
+                    </td>
+                  </tr>
 
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                      {rootCause || "Root cause belum tersedia."}
-                    </p>
-                  </td>
-                </tr>
+                  {/* ── ROOT CAUSE ── */}
+                  <tr>
+                    <td colSpan={2} className="px-5 py-5">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                        Root Cause
+                      </h3>
 
-                {/* ── TIMELINE ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                      Timeline
-                    </h3>
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                        {rootCause || "Root cause belum tersedia."}
+                      </p>
+                    </td>
+                  </tr>
 
-                    <TimelineSection items={timelineRaw} />
-                  </td>
-                </tr>
+                  {/* ── TIMELINE ── */}
+                  <tr>
+                    <td colSpan={2} className="px-5 py-5">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                        Timeline
+                      </h3>
 
-              </tbody>
-            </table>
-          </CardSection>
+                      <TimelineSection items={timelineRaw} />
+                    </td>
+                  </tr>
+
+                </tbody>
+              </table>
+            </CardSection>
+          </div>
         </div>
-
       </main>
+
+      {/* ── Footer ── */}
+      <footer className="w-full py-8">
+        <div className="flex flex-col items-center justify-center gap-3">
+
+          {/* GARIS GRADIENT + FADE */}
+          <div className="w-40 h-[2px] bg-gradient-to-r from-transparent via-slate-500/60 to-transparent animate-fadeIn"></div>
+
+          {/* TEXT */}
+          <p className="text-[12px] text-slate-500/80 tracking-wider">
+            Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
+          </p>
+
+        </div>
+      </footer>
+
     </div>);
 }
 
