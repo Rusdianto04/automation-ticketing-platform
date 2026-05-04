@@ -1,14 +1,3 @@
-/**
- * src/config/index.js
- * Centralized Application Configuration — Monorepo Edition
- *
- * FIX v2:
- *   portal.reportDir: null → path.join(process.cwd(), "public", "reports")
- *
- * MONOREPO:
- *   portal.frontendUrl: URL Next.js frontend untuk redirect & banner
- */
-
 "use strict";
 
 const path = require("path");

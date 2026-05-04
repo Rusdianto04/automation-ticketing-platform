@@ -1,18 +1,7 @@
-/**
- * src/middleware/auth.js
- * API Key Validation Middleware
- *
- * Digunakan oleh semua endpoint internal (/api/*) yang diakses
- * oleh n8n, peppermint, dan chatbot.
- */
-
 "use strict";
 
 const config = require("../config");
 
-/**
- * Express middleware — validasi X-API-Key header.
- */
 function validateApiKey(req, res, next) {
   const apiKey = req.headers["x-api-key"];
 

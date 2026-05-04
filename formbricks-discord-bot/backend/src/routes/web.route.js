@@ -1,21 +1,4 @@
-/**
- * src/routes/web.route.js
- * Web Routes — Monorepo Edition
- *
- * Dashboard & Ticket Detail telah dipindahkan ke Next.js frontend (port 3001).
- * Route ini hanya menyediakan:
- *   GET /health       — Health check (dipakai Docker healthcheck & monitoring)
- *   GET /             — Redirect ke frontend portal
- *   GET /dashboard    — Redirect ke frontend portal
- *   GET /tickets/:id  — Redirect ke frontend ticket detail
- *
- * FRONTEND_URL dikonfigurasi via env:
- *   Docker  : FRONTEND_URL=http://frontend:3001  (service name Docker network)
- *   Dev     : FRONTEND_URL=http://localhost:3001
- */
-
 "use strict";
-
 const router = require("express").Router();
 const config = require("../config");
 

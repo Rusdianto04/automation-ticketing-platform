@@ -1,27 +1,3 @@
-/**
- * src/handlers/chatbot.handler.js
- * Discord Chatbot Message Handler
- *
- * Menangani semua pesan yang mention bot atau DM.
- * Flow:
- *   1. Intent detection (incident_report | auto_create | normal)
- *   2. Incident Report → panggil generateReport() langsung (no HTTP self-call — hindari ECONNREFUSED di Docker)
- *   3. Auto Create → classifyTicketFields() → buat ticket + Discord thread
- *   4. Normal → forward ke N8N chatbot webhook
- *
- * FIX v2:
- *   [1] ticketType: "SUPPORT" → "TICKETING"
- *       DB hanya mengenal "TICKETING" atau "INCIDENT" (lihat config.ticket.validTypes).
- *       Menggunakan "SUPPORT" menyebabkan tiket tersimpan dengan type salah
- *       sehingga query stats/filter di N8N tidak menemukan tiket ini.
- *
- *   [2] pin() langsung → refactor ke DiscordService.createTicketThread()
- *       createTicketThread() sudah menggunakan pinSafe() yang graceful:
- *       jika bot tidak punya MANAGE_MESSAGES, fallback ke react 📌 + notif.
- *       Sebelumnya, pin() langsung akan throw DiscordAPIError[50013]
- *       dan tiket TIDAK tersimpan di DB karena crash sebelum update().
- */
-
 "use strict";
 
 const fs      = require("fs");
@@ -38,7 +14,6 @@ const { isRateLimited, markRequest } = require("../middleware/rateLimit");
 const { splitDiscordMessage } = require("../utils/discord");
 
 // ─── Conversation History (per userId, in-memory) ─────────────────────────────
-
 const conversationHistory = new Map();
 
 // Periodic cleanup — hapus history > 1 jam
@@ -55,26 +30,12 @@ setInterval(() => {
 }, config.chatbot.cleanupIntervalMs);
 
 // ─── Helper: push to history ──────────────────────────────────────────────────
-
 function pushHistory(userId, question, answer) {
   const history = conversationHistory.get(userId) || [];
   history.push({ question, answer: answer.substring(0, 500), timestamp: new Date().toISOString() });
   if (history.length > config.chatbot.maxHistoryPerUser) history.shift();
   conversationHistory.set(userId, history);
 }
-
-// ─── Intent Detection ─────────────────────────────────────────────────────────
-//
-// FIX: Perluas semua pattern untuk menangkap variasi bahasa Indonesia natural.
-//
-// Masalah di versi lama (identik Sequelize maupun Prisma):
-//   "buatkan saya threads ticket issue incident ..."  → isAutoCreateReq = FALSE
-//   "laporkan insiden jaringan mati ..."              → isAutoCreateReq = FALSE
-//   "tolong buatkan thread ticket ..."                → isAutoCreateReq = FALSE
-//   "internet loss connection ..."                    → isIncidentType  = FALSE
-//
-// Semua kasus di atas seharusnya di-handle LANGSUNG oleh bot (bypass N8N)
-// tanpa bergantung pada N8N intent classifier yang bisa salah detect.
 
 function detectIntent(question) {
   const q = question.toLowerCase();
@@ -87,8 +48,6 @@ function detectIntent(question) {
     (q.includes("incident report") || q.includes("laporan insiden") || q.includes("buatkan laporan"))
   );
 
-  // ── Auto Create Ticket Request ───────────────────────────────────────────────
-  // Pattern asli (pertahankan untuk backward compat):
   const OLD_CREATE_PATTERNS = (
     q.includes("buat ticket")         ||
     q.includes("buat tiket")          ||
@@ -124,9 +83,8 @@ function detectIntent(question) {
   const isAutoCreateReq = !isIncidentReportReq && (OLD_CREATE_PATTERNS || NEW_CREATE_PATTERNS);
 
   // ── Incident Type Detection ──────────────────────────────────────────────────
-  // FIX: tambah keyword yang sering dipakai tapi tidak ada di versi lama
   const isIncidentType = (
-    q.includes("incident")            ||  // ← PALING PENTING: "incident" dalam kalimat
+    q.includes("incident")            ||
     q.includes("insiden")             ||
     q.includes("mati total")          ||
     q.includes("down")                ||
@@ -134,7 +92,6 @@ function detectIntent(question) {
     q.includes("kritis")              ||
     q.includes("server mati")         ||
     q.includes("jaringan mati")       ||
-    // FIX: tambahan keywords yang umum dalam laporan insiden
     q.includes("internet mati")       ||
     q.includes("koneksi mati")        ||
     q.includes("loss connection")     ||
@@ -185,41 +142,19 @@ async function handleIncidentReport(message, ticketId, question, startTime) {
     await message.reply({ content: errMsg });
   }
 }
-// ─── Handler: Auto Create Ticket ─────────────────────────────────────────────
 
-/**
- * Auto-create ticket dari pesan Discord dan buka thread baru.
- *
- * FIX [1]: ticketType = "TICKETING" (bukan "SUPPORT")
- *   DB dan config hanya mengenal "TICKETING" atau "INCIDENT".
- *   "SUPPORT" menyebabkan:
- *     - Stats query tidak menghitung tiket ini (COUNT type='TICKETING')
- *     - N8N filter type='TICKETING' tidak menemukan tiket chatbot
- *
- * FIX [2]: Gunakan DiscordService.createTicketThread() bukan manual pin()
- *   createTicketThread() menggunakan pinSafe() yang graceful:
- *     - Tidak crash jika bot tidak punya MANAGE_MESSAGES (error 50013)
- *     - Fallback: react 📌 + notif di thread
- *   Manual pin() langsung akan throw dan tiket tidak tersimpan di DB.
- */
+// ─── Handler: Auto Create Ticket ─────────────────────────────────────────────
 async function handleAutoCreate(message, question, isIncidentType, startTime) {
   const userId = message.author.id;
-
-  // FIX [1]: "TICKETING" bukan "SUPPORT"
-  // config.ticket.validTypes = ["TICKETING", "INCIDENT"]
   const ticketType = isIncidentType ? "INCIDENT" : "TICKETING";
 
   await message.channel.sendTyping();
 
   try {
     console.log(`🆕 [CHATBOT] Auto-creating ${ticketType} for ${message.author.tag}`);
-
     const classified = await classifyTicketFields(question, ticketType);
     const { title, priority, severity, suspectArea, indicatedIssue, dateStr, timeStr } = classified;
-
     console.log(`   Title: "${title}" | ${priority}/${severity} | Area: ${suspectArea} | ${dateStr} ${timeStr}`);
-
-    // Build form fields — sama persis dengan struktur Formbricks submission
     const stopwords = ["yang","untuk","dari","dengan","adalah","pada","tidak","sudah","akan","juga","telah","dapat","atau","oleh","ini","itu","saja","bisa","maka","tapi","namun"];
     const keywords  = title.split(/\s+/).filter((w) => w.length > 3 && !stopwords.includes(w.toLowerCase())).slice(0, 10);
 
@@ -248,7 +183,6 @@ async function handleAutoCreate(message, question, isIncidentType, startTime) {
           "Support Type":         "General",
         };
 
-    // Buat ticket di DB
     let ticket = await TicketModel.create({
       type:               ticketType,
       formId:             "chatbot_auto_create",
@@ -264,22 +198,11 @@ async function handleAutoCreate(message, question, isIncidentType, startTime) {
       description: `Ticket #${ticket.id} auto-created via Discord Chatbot by ${message.author.tag}`,
     });
 
-    // FIX [2]: Gunakan DiscordService.createTicketThread() yang sudah pakai pinSafe()
-    // createTicketThread() menangani:
-    //   - Channel message dengan prefix yang benar per source
-    //   - Thread creation
-    //   - infoMessage + pin (via pinSafe — graceful jika MANAGE_MESSAGES tidak ada)
-    //   - overflow chunks jika konten > 1900 chars
-    //   - commandsMessage + pin (via pinSafe)
-    // Tidak perlu lagi manual: thread.send() → infoMsg.pin() → cmdMsg.pin()
     const { thread, infoMessage, overflowIds, commandsMessage } =
       await DiscordService.createTicketThread(ticket, config.discord.channelId, {
         source: "chatbot",
-        // description tidak dikirim — chatbot auto-create tidak butuh deskripsi tambahan
-        // (berbeda dengan /api/ticket/auto-create dari N8N yang mungkin ada description)
       });
 
-    // Update ticket dengan discord metadata
     ticket = await TicketModel.update(ticket.id, {
       discord: {
         infoMessageId:      infoMessage.id,
@@ -291,7 +214,6 @@ async function handleAutoCreate(message, question, isIncidentType, startTime) {
       },
     });
 
-    // Trigger N8N (non-blocking)
     axios.post(config.n8n.webhookUrl, {
       ticketId: ticket.id,
       threadId: thread.id,
@@ -316,7 +238,6 @@ async function handleAutoCreate(message, question, isIncidentType, startTime) {
 }
 
 // ─── Handler: Normal Question → N8N ──────────────────────────────────────────
-
 async function handleNormalQuestion(message, question, ticketId, startTime) {
   const userId = message.author.id;
 
@@ -347,9 +268,6 @@ async function handleNormalQuestion(message, question, ticketId, startTime) {
     const processingTime = Date.now() - startTime;
     const rawAnswer       = response.data?.answer;
     const questionCategory = response.data?.questionCategory || "general";
-
-    // FIX: guard answer undefined/empty — jika N8N crash atau return kosong
-    // mencegah '🤖 undefined' dan 'Cannot read properties of undefined (reading substring)'
     const answer = (rawAnswer && String(rawAnswer).trim())
       ? String(rawAnswer).trim()
       : "Maaf, tidak ada respons dari AI. Silakan coba lagi atau coba pertanyaan yang lebih spesifik.";
@@ -361,7 +279,6 @@ async function handleNormalQuestion(message, question, ticketId, startTime) {
     };
     const emoji = CATEGORY_EMOJI[questionCategory] || "🤖";
 
-    // Special: incident report dari N8N (jarang — biasanya sudah dihandle lokal)
     if (questionCategory === "incident_report" && response.data.reportData) {
       const reportData = response.data.reportData;
       const { reportUrl, filePath, reportId, reportTitle, ticketId: repTicketId } = reportData;
@@ -382,11 +299,8 @@ async function handleNormalQuestion(message, question, ticketId, startTime) {
         await message.channel.send({ content: `📎 **Download Incident Report:**`, files: [attachment] });
       }
     } else {
-      // Normal text answer — support chunked reply
-      // FIX: pastikan answer string valid sebelum split
       const safeAnswer = answer && String(answer).trim() ? String(answer).trim() : "(Tidak ada respons)";
       const chunks = splitDiscordMessage(safeAnswer);
-      // FIX: guard chunks[0] — tidak pernah undefined karena safeAnswer sudah dijamin
       const firstChunk = chunks[0] || safeAnswer;
       await message.reply({ content: `${emoji} ${firstChunk}` });
       for (let i = 1; i < chunks.length; i++) {
@@ -403,21 +317,17 @@ async function handleNormalQuestion(message, question, ticketId, startTime) {
     } else if (err.code === "ETIMEDOUT" || err.code === "ECONNABORTED") {
       await message.reply("⏱️ Request timeout. Pertanyaan terlalu kompleks. Coba lebih spesifik.");
     } else {
-      // FIX: jangan expose raw internal error (TypeError, undefined, dll) ke Discord
-      // Log detail di server, kirim pesan ramah ke user
       await message.reply("❌ Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi.");
     }
   }
 }
 
 // ─── Main Handler (dipanggil dari index.js) ───────────────────────────────────
-
 /**
  * Register semua chatbot-related event listeners ke Discord client.
- * @param {Client} client — Discord.js Client
+ * @param {Client} client
  */
 function register(client) {
-  // ── Main: mention / DM handler ──────────────────────────────────────────────
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
     if (message.content.startsWith("!")) return;
@@ -440,7 +350,6 @@ function register(client) {
         `• \`@bot buatkan incident report ticket #3\``
       );
     }
-
     const startTime = Date.now();
     const { isIncidentReportReq, isAutoCreateReq, isIncidentType, ticketId } = detectIntent(question);
 
@@ -490,10 +399,6 @@ function register(client) {
     if (message.author.bot) return;
     if (!message.content.startsWith("!chatbot-stats")) return;
     try {
-      // Self-call ke API sendiri:
-      // - Di Docker (sis-network): service name "backend" → http://backend:3000
-      // - Di dev: http://localhost:3000
-      // Override via BACKEND_SELF_URL di .env jika perlu
       const selfBase = config.portal.backendSelfUrl
         || (config.env === "production" ? `http://backend:${config.port}` : `http://localhost:${config.port}`);
       const response = await axios.get(

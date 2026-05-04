@@ -1,23 +1,11 @@
-/**
- * src/services/classifier.service.js
- * AI Ticket Field Classifier
- *
- * Mengklasifikasikan field tiket dari free-text menggunakan:
- *   1. Rule-based NLP (priority, severity, suspect area)
- *   2. Groq AI title generation (fallback ke rule-based jika gagal)
- *
- * Digunakan saat chatbot auto-create ticket dari Discord.
- */
-
 "use strict";
 
 const axios  = require("axios");
 const config = require("../config");
 
 /**
- * Klasifikasi field tiket dari raw text.
- *
- * @param {string} rawText — pesan asli dari Discord
+
+ * @param {string} rawText
  * @returns {{ title, priority, severity, suspectArea, indicatedIssue, dateStr, timeStr }}
  */
 async function classifyTicketFields(rawText) {

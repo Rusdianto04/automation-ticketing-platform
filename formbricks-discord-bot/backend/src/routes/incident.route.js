@@ -174,8 +174,6 @@ router.get("/:id", validateApiKey, async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/incident/:id/status
-// Update incident status + broadcast
-// Body: { status: "INVESTIGASI"|"MITIGASI"|"RESOLVED", note: "..." }
 // ---------------------------------------------------------------------------
 router.post("/:id/status", validateApiKey, async (req, res) => {
   try {
@@ -212,8 +210,6 @@ router.post("/:id/status", validateApiKey, async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/incident/:id/broadcast
-// Manual broadcast to Discord (e.g., admin wants to push a status update)
-// Body: { note: "optional message" }
 // ---------------------------------------------------------------------------
 router.post("/:id/broadcast", validateApiKey, async (req, res) => {
   try {
@@ -226,7 +222,6 @@ router.post("/:id/broadcast", validateApiKey, async (req, res) => {
     if (!ticket)               return res.status(404).json({ error: `Ticket #${id} not found` });
     if (ticket.type !== "INCIDENT") return res.status(400).json({ error: "Not an incident ticket" });
 
-    // Non-blocking broadcast
     IncidentService.processIncident(ticket, { updateNote: note, forceBroadcast: true })
       .catch((err) => console.warn("[INCIDENT] Broadcast error:", err.message));
 

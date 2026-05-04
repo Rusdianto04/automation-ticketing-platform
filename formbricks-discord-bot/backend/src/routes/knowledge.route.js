@@ -1,16 +1,3 @@
-/**
- * src/routes/knowledge.route.js
- * Knowledge Base API Routes
- *
- * Endpoint ini diakses oleh N8N untuk mencari runbook & solusi historis.
- * Semua query menggunakan PostgreSQL $queryRaw Prisma (parameterized — aman dari SQL injection).
- *
- * GET  /api/knowledge/search-runbooks  — search KB by keywords + category
- * POST /api/knowledge/search           — search similar resolved tickets
- * POST /api/knowledge/runbook          — tambah runbook baru
- * GET  /api/knowledge/runbooks         — list semua runbook
- */
-
 "use strict";
 
 const router = require("express").Router();

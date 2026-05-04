@@ -1,14 +1,3 @@
-/**
- * src/handlers/thread.handler.js
- * Discord Thread Activity Monitor
- *
- * Setiap pesan baru di thread tiket akan:
- *   1. Cari tiket berdasarkan threadId (JSONB query)
- *   2. Tentukan mode (MONITORING | CLOSING)
- *   3. Jika CLOSING & summary sudah ada → cek/repair Discord sync
- *   4. Trigger N8N workflow dengan context lengkap
- */
-
 "use strict";
 
 const TicketModel    = require("../models/ticket.model");
@@ -35,15 +24,11 @@ function register(client) {
 
       const mode = getTicketMode(ticket);
 
-      // FIX: Jika CLOSING & summary SUDAH ada di DB → pastikan Discord sinkron, lalu stop
-      // Jika CLOSING tapi summary BELUM ada → TETAP trigger N8N agar Workflow 1 bisa simpan summary
-      // (Sebelumnya: return jika mode CLOSING tanpa cek apakah summary sudah ada → N8N tidak pernah dipanggil)
       if (mode === "CLOSING" && ticket.summaryTicket?.trim()) {
         const outOfSync = await DiscordService.isDiscordOutOfSync(ticket);
         if (outOfSync) await DiscordService.repairPinnedMessage(ticket);
-        return; // tiket sudah selesai & sinkron — tidak perlu trigger N8N lagi
+        return;
       }
-
       // Trigger N8N event-driven (MONITORING mode ATAU CLOSING tanpa summary)
       await N8NService.triggerWorkflow({
         eventType:        "thread_activity",
