@@ -1,7 +1,3 @@
-/**
- * src/services/email.service.js
- * Email Service — SMTP via Nodemailer
- */
 
 "use strict";
 
@@ -10,7 +6,6 @@ const config     = require("../config");
 const { formatDateForEmail } = require("../utils/date");
 
 // ─── Transporter ─────────────────────────────────────────────────────────────
-
 const transporter = nodemailer.createTransport({
   host:   config.smtp.host,
   port:   config.smtp.port,
@@ -25,7 +20,6 @@ transporter.verify((err) => {
 });
 
 // ─── Send ─────────────────────────────────────────────────────────────────────
-
 async function sendEmail({ to, subject, html }) {
   if (!to) {
     console.warn("⚠ [EMAIL] No recipient — skipping");
@@ -45,7 +39,6 @@ async function sendEmail({ to, subject, html }) {
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
-
 function buildConfirmationEmail(ticket, ticketType, portalUrl) {
   const fields       = ticket.formFields || ticket.form_fields || {};
   const reporterName = fields["Reporter Information"] || "Pelapor";

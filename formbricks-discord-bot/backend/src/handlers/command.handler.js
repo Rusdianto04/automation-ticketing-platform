@@ -1,11 +1,3 @@
-/**
- * src/handlers/command.handler.js
- * Discord Command Handlers: !status !assign !evidence
- *
- * Semua command handler di-register ke Discord client.
- * Tidak ada Sequelize — semua DB ops via Prisma model layer.
- */
-
 "use strict";
 
 const config         = require("../config");
@@ -44,11 +36,9 @@ function register(client) {
         "**Incident:** investigasi | mitigasi | resolved"
       );
     }
-
     let ticket = await TicketModel.findById(ticketId);
     if (!ticket) return message.reply(`❌ Ticket #${ticketId} tidak ditemukan`);
 
-    // Resolve status
     let statusPengusulan, statusLabel;
     if (ticket.type === "INCIDENT") {
       switch (action.toLowerCase()) {
@@ -69,7 +59,6 @@ function register(client) {
       }
     }
 
-    // Build update — set resolvedAt jika closing status
     const isClosingStatus =
       (ticket.type === "INCIDENT" && statusPengusulan === "RESOLVED") ||
       (ticket.type !== "INCIDENT" && statusPengusulan === "DONE");
@@ -82,7 +71,6 @@ function register(client) {
 
     ticket = await TicketModel.update(ticketId, updateData);
 
-    // Update Discord
     await DiscordService.updateThreadTitle(ticket);
     await DiscordService.updateTicketMessage(ticket);
 
@@ -92,7 +80,6 @@ function register(client) {
       description: `Status: ${statusLabel}${note ? " | Note: " + note : ""}`,
     });
 
-    // Closing flow — tunggu N8N generate summary/rootCause
     if (isClosingStatus) {
       await new Promise((r) => setTimeout(r, 3000));
       const freshTicket = await TicketModel.findById(ticketId);

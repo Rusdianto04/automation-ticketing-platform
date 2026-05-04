@@ -1,21 +1,7 @@
-/**
- * src/database/views.js
- * PostgreSQL Views Setup
- *
- * Membuat ulang view ticket_dashboard dan chatbot_analytics.
- * Dipanggil sekali saat startup — menggantikan logika Sequelize sync.
- *
- * View ini dibaca langsung oleh n8n dan peppermint — SQL TIDAK BERUBAH.
- */
-
 "use strict";
 
 const prisma = require("./client");
 
-/**
- * Drop dan recreate semua views.
- * Aman dipanggil berulang kali — idempotent.
- */
 async function setupViews() {
   // Step 1 — Drop existing views (agar recreate bersih)
   try {

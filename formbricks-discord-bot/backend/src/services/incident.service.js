@@ -1,29 +1,9 @@
-/**
- * src/services/incident.service.js
- * Incident Management Service — NEW (v9)
- *
- * GitHub-Status-like incident lifecycle management.
- *
- * Status lifecycle:
- *   OPEN → INVESTIGASI → MITIGASI → RESOLVED
- *
- * Key concepts:
- *   • An "incident group" is just a parent INCIDENT ticket whose discord.json
- *     stores grouped child ticket IDs in a new `groupedTicketIds` array.
- *   • We reuse the existing `tickets` table — no new table needed.
- *   • Category is stored in form_fields["Suspect Area"] (already exists).
- *   • Broadcast is done via DiscordService (already exists).
- *
- * This service is purely additive — it never modifies existing routes or models.
- */
-
 "use strict";
 
 const prisma       = require("../database/client");
 const TicketModel  = require("../models/ticket.model");
 const ActivityModel = require("../models/activity.model");
 
-// Lazy-load DiscordService to avoid circular dependency issues
 let _discord = null;
 function discord() {
   if (!_discord) _discord = require("./discord.service");
@@ -34,14 +14,12 @@ function discord() {
 // Constants
 // ---------------------------------------------------------------------------
 
-// Keyword patterns that auto-trigger incident detection
 const INCIDENT_KEYWORDS = [
   "down", "outage", "mati", "tidak bisa", "gangguan total", "semua user",
   "seluruh", "parah", "kritis", "critical", "server", "network", "jaringan",
   "database", "internet mati", "tidak ada koneksi",
 ];
 
-// Category mapping based on form_fields["Suspect Area"] or keywords
 const INCIDENT_CATEGORIES = {
   network:     ["network", "internet", "jaringan", "koneksi", "wifi", "lan", "vpn"],
   system:      ["server", "database", "db", "storage", "backup", "os", "windows", "linux"],
@@ -50,7 +28,6 @@ const INCIDENT_CATEGORIES = {
   security:    ["security", "hack", "virus", "ransomware", "breach", "akses tidak sah"],
 };
 
-// Status display labels (for Discord messages)
 const STATUS_LABELS = {
   OPEN:        "🔴 Investigating",
   INVESTIGASI: "🟡 Investigating",
@@ -58,10 +35,6 @@ const STATUS_LABELS = {
   RESOLVED:    "🟢 Resolved",
   DONE:        "🟢 Resolved",
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function detectCategory(text = "", suspectArea = "") {
   const combined = `${text} ${suspectArea}`.toLowerCase();
@@ -85,11 +58,6 @@ function buildStatusEmoji(status = "OPEN") {
 // ---------------------------------------------------------------------------
 
 /**
- * Decide whether an incoming ticket (type=INCIDENT) should be promoted
- * as a "major incident" that requires special broadcast treatment.
- *
- * Called AFTER ticket creation. Non-blocking — never throws.
- *
  * @param {object} ticket — normalized ticket from TicketModel
  * @returns {{ isIncident: boolean, category: string, reason: string }}
  */
@@ -101,7 +69,6 @@ function analyzeForIncident(ticket) {
     const priority = (ff["Priority Incident"] || "").toLowerCase();
     const severity = (ff["Severity Incident"] || "").toLowerCase();
 
-    // Already typed INCIDENT — always treat as incident
     if (ticket.type === "INCIDENT") {
       const category = detectCategory(text, area);
       const isCritical = ["critical","high","tinggi","kritis"].some(
@@ -115,7 +82,6 @@ function analyzeForIncident(ticket) {
       };
     }
 
-    // TICKETING — check for incident keywords
     if (ticket.type === "TICKETING" && isIncidentKeyword(text)) {
       return {
         isIncident:  true,
@@ -138,21 +104,14 @@ function analyzeForIncident(ticket) {
 // ---------------------------------------------------------------------------
 
 /**
- * Find an existing open incident that matches the same category
- * and was created within the last 4 hours (grouping window).
- *
- * Returns null if none found.
- *
  * @param {string} category
  * @param {string[]} keywords
  * @returns {Promise<object|null>}
  */
 async function findOpenIncidentGroup(category, keywords = []) {
   try {
-    const windowMs = 4 * 60 * 60 * 1000; // 4 hours
+    const windowMs = 4 * 60 * 60 * 1000;
     const since    = new Date(Date.now() - windowMs);
-
-    // Look for recent open INCIDENT tickets that could be the group parent
     const rows = await prisma.$queryRaw`
       SELECT id, form_fields, discord, status_pengusulan, created_at, search_keywords
       FROM tickets
@@ -163,7 +122,6 @@ async function findOpenIncidentGroup(category, keywords = []) {
       LIMIT 20
     `;
 
-    // Filter by category match
     for (const row of rows) {
       const ff   = (typeof row.form_fields === "string" ? JSON.parse(row.form_fields) : row.form_fields) || {};
       const text = `${ff["Incident Information"] || ""} ${ff["Suspect Area"] || ""}`;
@@ -184,9 +142,6 @@ async function findOpenIncidentGroup(category, keywords = []) {
 }
 
 /**
- * Attach a child ticket to an existing incident group.
- * Updates the parent's discord.groupedTicketIds array.
- *
  * @param {number} parentId
  * @param {number} childId
  */
@@ -220,8 +175,6 @@ async function attachToGroup(parentId, childId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Build an incident status broadcast message for Discord.
- *
  * @param {object} ticket   — normalized ticket
  * @param {object} opts
  * @param {string}   opts.category
@@ -261,14 +214,6 @@ function buildIncidentBroadcastMessage(ticket, { category = "general", updateNot
 // ---------------------------------------------------------------------------
 
 /**
- * Main lifecycle handler. Called NON-BLOCKINGLY from webhook/ticket creation.
- *
- * Steps:
- *   1. Analyze ticket for incident flags
- *   2. Find or skip incident group
- *   3. Attach to group if found
- *   4. Broadcast to Discord
- *
  * @param {object} ticket   — normalized ticket (just created)
  * @param {object} [opts]
  * @param {string}   [opts.updateNote]   — manual update note
@@ -348,9 +293,6 @@ async function processIncident(ticket, opts = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * Update incident status and broadcast.
- * Called from ticket.route.js PATCH /:id/status (non-breaking extension).
- *
  * @param {number} ticketId
  * @param {string} newStatus   — INVESTIGASI | MITIGASI | RESOLVED
  * @param {string} [note]
@@ -400,7 +342,6 @@ async function updateIncidentStatus(ticketId, newStatus, note = "") {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-
 module.exports = {
   analyzeForIncident,
   processIncident,

@@ -1,28 +1,3 @@
-/**
- * src/services/discord.service.js
- * Discord Service — Production v5
- *
- * Equivalent 1:1 dengan semua fungsi Discord di index.js original (Sequelize v4).
- * Semua logic, format pesan, command text, dan alur identik dengan original.
- *
- * Fungsi yang di-port dari original:
- *   buildTicketInfoMessage()         → identik dengan original (~line 280)
- *   buildTicketCommandsMessage()     → identik dengan original (~line 320)
- *   buildIncidentInfoMessage()       → identik dengan original (~line 330)
- *   buildIncidentCommandsMessage()   → identik dengan original (~line 380)
- *   updateTicketMessage()            → identik dengan original updateTicketMessage()
- *   updateThreadTitle()              → identik dengan original updateThreadTitle()
- *   isDiscordOutOfSync()             → identik dengan original isDiscordOutOfSync()
- *   repairPinnedMessage()            → identik dengan original repairDiscordPinnedMessage()
- *   createTicketThread()             → gabungan 3 varian di original:
- *                                        formbricks webhook, chatbot auto-create, portal create
- *
- * FIX v2 (production):
- *   - pin() dibungkus pinSafe() — tidak crash jika bot kurang permission MANAGE_MESSAGES
- *   - Fallback react 📌 + notif jika pin gagal (error 50013)
- *   - source option di createTicketThread() untuk bedakan prefix channel message
- */
-
 "use strict";
 
 const { editMessageSafe, splitDiscordMessage } = require("../utils/discord");
@@ -36,33 +11,19 @@ const TicketModel   = require("../models/ticket.model");
 const ActivityModel = require("../models/activity.model");
 
 // ─── Client Singleton ────────────────────────────────────────────────────────
-
 let _client = null;
 
-/** Set Discord client (dipanggil dari index.js bootstrap, sebelum client.login()) */
 function setClient(client) {
   _client = client;
 }
 
-/**
- * Get Discord client — throws jika belum di-set.
- * Selalu gunakan ini daripada akses _client langsung.
- */
 function getClient() {
   if (!_client) throw new Error("[DISCORD] Client not initialized. Call setClient() first.");
   return _client;
 }
 
 // ─── Message Builders ─────────────────────────────────────────────────────────
-//
-// Format pesan identik 100% dengan original index.js.
-// Jangan ubah whitespace, separator dash, bullet, atau label —
-// Peppermint Portal dan N8N mungkin melakukan string matching terhadap konten ini.
-
 /**
- * Build info message untuk tiket SUPPORT (TICKETING).
- * Equivalent dengan buildTicketInfoMessage() di original index.js.
- *
  * @param {object} ticket — normalized ticket
  * @returns {string}
  */
@@ -85,10 +46,6 @@ function buildTicketInfoMessage(ticket) {
   const statusNoteStr = (statusNote && statusNote.trim() !== "") ? ` (${statusNote})` : "";
   const updatedStr    = updatedAt ? formatDateTime(updatedAt) : formatDateTime(new Date());
 
-  // Summary section — hanya muncul jika ada konten
-  // PENTING: rootCause TIDAK ditampilkan di pinned Discord message (identik dengan original index.js).
-  // rootCause hanya tersimpan di DB dan ditampilkan via chatbot bot saat dipanggil user.
-  // N8N discordHasSummary check: c.includes('**Summary:**') → tetap bekerja ✓
   let summarySection = "";
   if (summaryTicket && summaryTicket.trim() !== "") {
     summarySection = `----------------------------------------------\n**Summary:**\n${summaryTicket}\n`;
@@ -133,9 +90,6 @@ ${formatEvidenceForDisplay(evidence)}
 }
 
 /**
- * Build commands message untuk tiket SUPPORT.
- * Equivalent dengan buildTicketCommandsMessage() di original index.js.
- *
  * @param {object} ticket
  * @returns {string}
  */
@@ -152,9 +106,6 @@ function buildTicketCommandsMessage(ticket) {
 }
 
 /**
- * Build info message untuk tiket INCIDENT.
- * Equivalent dengan buildIncidentInfoMessage() di original index.js.
- *
  * @param {object} ticket
  * @returns {string}
  */
@@ -186,18 +137,10 @@ function buildIncidentInfoMessage(ticket) {
     }
   }
 
-  // Handling section — summary (summaryTicket) ditampilkan sebagai "Handling:" di pinned message
-  // IDENTIK dengan original index.js: const handling = ticket.summaryTicket || "(Belum ada penanganan)"
-  // PENTING: rootCause TIDAK ditampilkan di pinned Discord message —
-  // hanya tersimpan di DB dan ditampilkan via chatbot bot saat user memanggilnya.
-  // N8N discordHasSummary detection diupdate: c.includes('**Handling:**') — sesuai original.
   const handling = (summaryTicket && summaryTicket.trim() !== "")
     ? summaryTicket
     : "(Belum ada penanganan)";
 
-  // ── Format identik dengan original index.js buildIncidentInfoMessage() ──
-  // Ticket ID line ditambahkan agar N8N Workflow 1 dapat mem-parse ticketId
-  // via regex: /#(\d+)_(Support|Incident)/
   return `-----------------------------------------------
 🚨 **INCIDENT REPORT**
 -----------------------------------------------
@@ -227,9 +170,6 @@ ${formatEvidenceForDisplay(evidence)}
 }
 
 /**
- * Build commands message untuk tiket INCIDENT.
- * Equivalent dengan buildIncidentCommandsMessage() di original index.js.
- *
  * @param {object} ticket
  * @returns {string}
  */
@@ -246,9 +186,6 @@ function buildIncidentCommandsMessage(ticket) {
 }
 
 /**
- * Pilih info message builder berdasarkan tipe tiket.
- * Dipakai oleh updateTicketMessage(), repairPinnedMessage(), createTicketThread().
- *
  * @param {object} ticket
  * @returns {string}
  */
@@ -259,8 +196,6 @@ function buildInfoMessage(ticket) {
 }
 
 /**
- * Pilih commands message builder berdasarkan tipe tiket.
- *
  * @param {object} ticket
  * @returns {string}
  */
@@ -273,20 +208,6 @@ function buildCommandsMessage(ticket) {
 // ─── Pin Helper ───────────────────────────────────────────────────────────────
 
 /**
- * Pin pesan Discord dengan graceful fallback.
- *
- * Bot memerlukan permission MANAGE_MESSAGES untuk melakukan pin.
- * Tanpa permission → DiscordAPIError[50013]: Missing Permissions.
- *
- * Fallback jika gagal:
- *   1. React 📌 ke pesan (visual marker mudah ditemukan)
- *   2. Kirim satu notif di thread (hanya untuk info message, bukan commands)
- *
- * Bot dan thread tetap berjalan normal meski pin gagal.
- *
- * FIX: Solusi permanen → berikan permission Manage Messages ke bot role:
- *   Discord → Channel Settings → Permissions → [Bot Role] → ✅ Manage Messages
- *
  * @param {Message}       message  — pesan yang akan di-pin
  * @param {ThreadChannel} thread   — thread (untuk fallback notif)
  * @param {string}        label    — "info" | "commands" (untuk log & fallback selektif)
@@ -311,14 +232,6 @@ async function pinSafe(message, thread, label = "message") {
 
 // ─── Update Operations
 /**
- * Guard: cek existing pinned di thread sebelum pin baru.
- * Identik dengan behavior original index.js — tidak pernah double pin.
- *
- * FIX (Prisma layer — saran ChatGPT):
- *   createTicketThread() dipanggil ulang karena retry / webhook duplicate
- *   menyebabkan double pin. Guard ini cek apakah bot sudah punya pinned
- *   message dengan ticketId sebelum pin ulang.
- *
  * @param {ThreadChannel} thread    — Discord thread
  * @param {number|string} ticketId  — ID tiket
  * @returns {Promise<{ hasInfo: boolean, hasCommands: boolean }>}
@@ -346,13 +259,6 @@ async function checkExistingPins(thread, ticketId) {
 }
 
 /**
- * Refresh pinned info message di thread Discord setelah perubahan data tiket.
- * Equivalent dengan updateTicketMessage() di original index.js.
- *
- * Perbedaan v5 vs original:
- *   Original: ticket.reload() (Sequelize instance method)
- *   v5:       TicketModel.findById(ticket.id) (Prisma, equivalent result)
- *
  * @param {object} ticket — normalized ticket (id wajib ada, discord.threadId & infoMessageId juga)
  */
 async function updateTicketMessage(ticket) {
@@ -363,7 +269,6 @@ async function updateTicketMessage(ticket) {
   }
 
   try {
-    // Reload fresh dari DB — identik dengan ticket.reload() di Sequelize original
     const fresh   = await TicketModel.findById(ticket.id);
     const thread  = await getClient().channels.fetch(fresh.discord.threadId);
     if (!thread) return;
@@ -373,8 +278,6 @@ async function updateTicketMessage(ticket) {
 
     const newContent = buildInfoMessage(fresh);
 
-    // editMessageSafe: handle pesan > 1900 char (overflow ke pesan berikutnya)
-    // saveTicketFn diperlukan untuk persist overflowMessageIds baru ke DB
     await editMessageSafe(thread, message, newContent, fresh, async (t) => {
       await TicketModel.update(t.id, { discord: t.discord });
     });
@@ -387,12 +290,6 @@ async function updateTicketMessage(ticket) {
 
 /**
  * Update nama thread sesuai status tiket terbaru.
- * Equivalent dengan updateThreadTitle() di original index.js.
- *
- * Prefix thread name identik dengan original:
- *   TICKETING: [OPEN] → [PENDING] → [IN PROGRESS] → [REJECTED] → [CLOSED]
- *   INCIDENT:  [OPEN] → [INVESTIGASI] → [MITIGASI] → [CLOSED]
- *
  * @param {object} ticket
  */
 async function updateThreadTitle(ticket) {
@@ -406,7 +303,6 @@ async function updateThreadTitle(ticket) {
     const status      = ticket.statusPengusulan || ticket.status_pengusulan;
     const ticketTitle = getTicketTitle(ticket);
 
-    // Prefix identik karakter-per-karakter dengan original
     let prefix = "[OPEN] ";
     if (ticket.type === "INCIDENT") {
       if (status === "INVESTIGASI")  prefix = "[INVESTIGASI] ";
@@ -431,15 +327,7 @@ async function updateThreadTitle(ticket) {
 }
 
 /**
- * Cek apakah pinned message di Discord tidak sinkron dengan data di DB.
- * Equivalent dengan isDiscordOutOfSync() di original index.js.
- *
- * Out-of-sync terjadi ketika:
- *   AI summary sudah tersimpan di DB TAPI belum ter-render di Discord.
- *   Umumnya terjadi setelah status diubah ke DONE/RESOLVED dan N8N
- *   belum sempat memanggil /api/ticket/summary.
- *
- * @param {object} ticket
+ * Cek apakah pinned message di Discord tidak sinkron dengan data di DB.aram {object} ticket
  * @returns {Promise<boolean>}
  */
 async function isDiscordOutOfSync(ticket) {
@@ -447,7 +335,6 @@ async function isDiscordOutOfSync(ticket) {
   const summaryTicket = ticket.summaryTicket || ticket.summary_ticket;
 
   if (!discord.threadId || !discord.infoMessageId) return false;
-  // Hanya cek summaryTicket — rootCause tidak ditampilkan di pinned message (identik original)
   if (!summaryTicket) return false;
 
   try {
@@ -457,8 +344,6 @@ async function isDiscordOutOfSync(ticket) {
     if (!message) return false;
 
     const discordContent = message.content || "";
-    // Support: content ada di bawah **Summary:** | Incident: ada di bawah **Handling:**
-    // Identik dengan original: !discordContent.includes(ticket.summaryTicket.substring(0, 30))
     if (!discordContent.includes(summaryTicket.substring(0, 30))) return true;
     return false;
   } catch (_) {
@@ -468,12 +353,6 @@ async function isDiscordOutOfSync(ticket) {
 
 /**
  * Perbaiki pinned message yang tidak sinkron dengan DB.
- * Equivalent dengan repairDiscordPinnedMessage() di original index.js.
- *
- * Dipanggil dalam 2 kondisi (sama dengan original):
- *   1. Thread activity monitor mendeteksi mode CLOSING + out-of-sync
- *   2. !status command selesai (DONE/RESOLVED) + summary sudah ada di DB
- *
  * @param {object} ticket
  * @returns {Promise<boolean>} — true jika berhasil repair
  */
@@ -508,21 +387,6 @@ async function repairPinnedMessage(ticket) {
 
 /**
  * Buat Discord thread baru untuk tiket + pin info & commands messages.
- *
- * Menggabungkan 3 varian createThread dari original index.js dalam satu fungsi:
- *
- *   source: "formbricks" (default) — dari Formbricks webhook
- *     Channel msg: "🎫 Judul" atau "🚨 Judul"
- *     Dipakai oleh: webhook.route.js
- *
- *   source: "chatbot" — dari Discord chatbot auto-create
- *     Channel msg: "🤖 **[AUTO-CREATED via Chatbot]** 🎫 Judul"
- *     Dipakai oleh: chatbot.handler.js, ticket.route.js /auto-create
- *
- *   source: "portal" — dari Peppermint Portal
- *     Channel msg: "🌐 **[PORTAL]** 🎫 Judul"
- *     Dipakai oleh: ticket.route.js /create (autoCreateDiscord: true)
- *
  * @param {object}  ticket             — normalized ticket
  * @param {string}  channelId          — Discord channel ID
  * @param {object}  [options]
@@ -539,7 +403,6 @@ async function createTicketThread(ticket, channelId, options = {}) {
   const typeLabel   = ticket.type === "INCIDENT" ? "[Incident]" : "[Support]";
 
   // ── Channel message — prefix berbeda per source ────────────────────────────
-  // Format identik dengan masing-masing varian di original index.js
   let channelMsgContent;
   if (source === "chatbot") {
     // Original: `${autoLabel} ${emoji} ${title}` dimana autoLabel = "🤖 **[AUTO-CREATED via Chatbot]**"
@@ -560,8 +423,6 @@ async function createTicketThread(ticket, channelId, options = {}) {
   const thread    = await msg.startThread({ name: finalName, autoArchiveDuration: 1440 });
 
   // ── Cek existing pinned SEBELUM pin baru (FIX double pin — Prisma layer) ──
-  // Identik dengan guard di original index.js: tidak pernah pin jika sudah ada.
-  // Penting: dipanggil SETELAH thread dibuat agar fetchPinned berjalan normal.
   const existingPins = await checkExistingPins(thread, ticket.id);
 
   // ── Info message (chunk 1) + pin (jika belum ter-pin) ────────────────────
@@ -591,7 +452,6 @@ async function createTicketThread(ticket, channelId, options = {}) {
   }
 
   // ── Deskripsi tambahan — hanya untuk chatbot auto-create ─────────────────
-  // Identik dengan original: thread.send(`📝 **Deskripsi dari pengguna:**\n${description}`)
   if (description && description.trim()) {
     await thread.send({ content: `📝 **Deskripsi dari pengguna:**\n${description.trim()}` });
   }
@@ -600,22 +460,15 @@ async function createTicketThread(ticket, channelId, options = {}) {
 }
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
-
 module.exports = {
-  // Client management
   setClient,
   getClient,
-
-  // Message builders
-  // (diexport untuk dipakai langsung di chatbot.handler.js dan tests)
   buildInfoMessage,
   buildCommandsMessage,
   buildTicketInfoMessage,
   buildIncidentInfoMessage,
   buildTicketCommandsMessage,
   buildIncidentCommandsMessage,
-
-  // Discord operations
   updateTicketMessage,
   updateThreadTitle,
   isDiscordOutOfSync,

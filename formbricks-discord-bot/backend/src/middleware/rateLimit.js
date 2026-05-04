@@ -1,11 +1,3 @@
-/**
- * src/middleware/rateLimit.js
- * In-Memory Rate Limiter (per Discord userId)
- *
- * Mencegah spam ke chatbot — 1 request per WINDOW_MS per user.
- * Tidak menggunakan Redis (in-process map cukup untuk skala ini).
- */
-
 "use strict";
 
 const config   = require("../config");
@@ -13,7 +5,6 @@ const config   = require("../config");
 const { windowMs, purgeAfterMs } = config.rateLimit;
 const requestMap = new Map();
 
-// Cleanup periodic — hapus entry yang sudah kadaluarsa
 setInterval(() => {
   const cutoff = Date.now() - purgeAfterMs;
   for (const [k, v] of requestMap.entries()) {

@@ -13,6 +13,8 @@ import {
   adminUpdateTicketDataAction,
   adminUpdateFormFieldsAction,
 } from "../../actions";
+// ✅ FIX: Import TimelineSection untuk render timeline bergaya portal user
+import { TimelineSection } from "@/app/tickets/[id]/SharedComponents";
 
 interface Activity {
   id: number;
@@ -32,13 +34,44 @@ interface TicketDetail {
   assignee: string[];
   summary_ticket: string;
   root_cause: string;
+  // ✅ FIX: Kedua field timeline bertipe string (sudah dikonversi di page.tsx)
+  timeline_tindak_lanjut: string;
+  timeline_action_taken: string;
   discord: { threadUrl?: string; threadId?: string };
   report_url: string;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
   activities: Activity[];
+  recommendation?: {
+    found: boolean;
+    isIncident: boolean;
+    label: string;
+    similarTickets: {
+      ticketId: number;
+      title: string;
+      summary: string | null;
+      rootCause: string | null;
+      timeline: string | null;
+      resolvedAt: string | null;
+    }[];
+    runbooks: {
+      title: string;
+      category: string;
+      content: string;
+      successRate: number;
+    }[];
+    topSuggestion: {
+      source: string;
+      ticketId?: number;
+      title?: string;
+      summary?: string;
+      rootCause?: string;
+      content?: string;
+    } | null;
+  } | null;
 }
+
 
 const STATUS_OPTIONS_SUPPORT  = ["OPEN", "PENDING", "DONE", "REJECT"] as const;
 const STATUS_OPTIONS_INCIDENT = ["OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"] as const;
@@ -96,14 +129,12 @@ function formatActivityDescription(description: string, type: string): string {
   if (!description) return type;
 
   let d = description;
-  // Ganti "Peppermint Portal" / "peppermint_portal"
   d = d.replace(/peppermint[_ ]portal/gi, "Portal");
   d = d.replace(/Tiket dibuat dari Portal/gi, "Ticket dibuat melalui Portal Users");
   d = d.replace(/Tiket dibuat dari admin_portal/gi, "Ticket dibuat melalui Portal Admin");
   d = d.replace(/Tiket dibuat dari static_portal/gi, "Ticket dibuat melalui Portal Users");
   d = d.replace(/Tiket dibuat dari Portal oleh admin:/gi, "Ticket dibuat oleh Admin:");
   d = d.replace(/Tiket dibuat dari Portal oleh/gi, "Ticket dibuat oleh");
-  // Fallback jika masih ada sisa "peppermint"
   d = d.replace(/peppermint/gi, "Portal");
   return d;
 }
@@ -149,9 +180,9 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  const statusLabels = isIncident ? STATUS_LABELS_INCIDENT : STATUS_LABELS_SUPPORT;
-  const rawStatus    = ticket.status;
-  const badgeLabel   = isIncident
+  const statusLabels    = isIncident ? STATUS_LABELS_INCIDENT : STATUS_LABELS_SUPPORT;
+  const rawStatus       = ticket.status;
+  const badgeLabel      = isIncident
     ? (STATUS_LABELS_INCIDENT[rawStatus] || rawStatus).replace(/^[^\w]*/, "").trim()
     : (STATUS_BADGE_LABELS[rawStatus] || rawStatus);
   const badgeColorClass = STATUS_COLORS[rawStatus] || "bg-slate-100 text-slate-600 border-slate-200";
@@ -181,17 +212,17 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  const reportUrl      = ticket.report_url || "";
-  const attachmentUrl  = (ticket.form_fields["Attachment"] as string) || "";
-  const isImageUrl     = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
+  const reportUrl     = ticket.report_url || "";
+  const attachmentUrl = (ticket.form_fields["Attachment"] as string) || "";
+  const isImageUrl    = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
 
   // Field formulir yang ditampilkan — exclude "Attachment" (sudah ada card sendiri)
   const displayFormFields = Object.entries(formEdits).filter(([k]) => k !== "Attachment");
 
-  // Timeline data
-  const timelineKey = isIncident ? "timeline_action_taken" : "timeline_tindak_lanjut";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const timelineData = (ticket as any)[timelineKey] || "";
+  // ✅ FIX: Timeline data diambil langsung dari field yang sudah di-pass dan di-serialize dari page.tsx
+  const timelineData = isIncident
+    ? (ticket.timeline_action_taken  || "")
+    : (ticket.timeline_tindak_lanjut || "");
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -419,6 +450,90 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
+            {/* ── Smart Recommendation (Teknisi) ── */}
+            {ticket.recommendation && ticket.recommendation.found && (
+              <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
+                <div className="px-4 py-3 bg-emerald-700 text-white text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
+                  💡 Smart Recommendation
+                  <span className="ml-auto text-[10px] font-normal opacity-80 normal-case">
+                    {ticket.recommendation.isIncident ? "Referensi Mitigasi Insiden" : "Referensi Solusi Teknisi"}
+                  </span>
+                </div>
+                <div className="p-4 space-y-4">
+                  <p className="text-[12px] text-emerald-700 font-medium border-l-4 border-emerald-400 pl-3 bg-emerald-50 py-2 rounded-r">
+                    {ticket.recommendation.label}
+                  </p>
+
+                  {/* Similar Tickets */}
+                  {ticket.recommendation.similarTickets.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+                        📋 {ticket.recommendation.isIncident ? "Insiden Serupa" : "Kasus Serupa"} ({ticket.recommendation.similarTickets.length})
+                      </p>
+                      <div className="space-y-3">
+                        {ticket.recommendation.similarTickets.map((t) => (
+                          <div key={t.ticketId} className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-[12px]">
+                            <p className="font-semibold text-slate-700">
+                              #{t.ticketId} — {t.title}
+                              {t.resolvedAt && (
+                                <span className="ml-2 text-[10px] text-slate-400 font-normal">
+                                  Resolved: {new Date(t.resolvedAt).toLocaleDateString("id-ID")}
+                                </span>
+                              )}
+                            </p>
+                            {t.summary && (
+                              <div className="mt-2 border-l-2 border-emerald-400 pl-2">
+                                <p className="text-[10px] text-slate-400 font-semibold uppercase">✅ Solusi</p>
+                                <p className="text-slate-600 whitespace-pre-wrap">{t.summary}</p>
+                              </div>
+                            )}
+                            {t.rootCause && (
+                              <div className="mt-1 border-l-2 border-amber-400 pl-2">
+                                <p className="text-[10px] text-slate-400 font-semibold uppercase">🔍 Root Cause</p>
+                                <p className="text-slate-600 whitespace-pre-wrap">{t.rootCause}</p>
+                              </div>
+                            )}
+                            {t.timeline && (
+                              <div className="mt-1 border-l-2 border-blue-400 pl-2">
+                                <p className="text-[10px] text-slate-400 font-semibold uppercase">📅 Action Steps</p>
+                                <p className="text-slate-600 whitespace-pre-wrap">{t.timeline}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Runbooks */}
+                  {ticket.recommendation.runbooks.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+                        📚 Knowledge Base / Runbook
+                      </p>
+                      <div className="space-y-2">
+                        {ticket.recommendation.runbooks.map((r, i) => (
+                          <div key={i} className="bg-blue-50 rounded-lg p-3 border border-blue-200 text-[12px]">
+                            <p className="font-semibold text-blue-700">
+                              [{r.category}] {r.title}
+                              {r.successRate > 0 && (
+                                <span className="ml-2 text-[10px] text-blue-500">
+                                  ✅ {r.successRate}% success rate
+                                </span>
+                              )}
+                            </p>
+                            {r.content && (
+                              <p className="mt-1 text-slate-600 whitespace-pre-wrap">{r.content}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Root Cause — selalu tampil */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-amber-800 text-amber-100 text-[12px] font-bold uppercase tracking-wider">
@@ -435,20 +550,12 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* Timeline Progress — selalu tampil */}
+            {/* ✅ FIX: Timeline Progress — menggunakan TimelineSection sama seperti portal user */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
                 ⏱️ {isIncident ? "Action Taken / Timeline" : "Timeline Progress / Tindak Lanjut"}
               </div>
-              {timelineData ? (
-                <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">
-                  {timelineData}
-                </div>
-              ) : (
-                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
-                  Belum ada progress yang dicatat.
-                </div>
-              )}
+              <TimelineSection items={timelineData || null} />
             </div>
 
             {/* Activity Log — dengan label yang bersih */}

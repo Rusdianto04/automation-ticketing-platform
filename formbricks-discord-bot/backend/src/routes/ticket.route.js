@@ -1,18 +1,3 @@
-/**
- * src/routes/ticket.route.js
- * Ticket API Routes — Production v5 Final
- *
- * Router ini dipasang DUA kali di index.js:
- *   app.use("/api/ticket",  ticketRoute)   - singular prefix (core API & portal CRUD)
- *   app.use("/api/tickets", ticketRoute)   - plural prefix  (portal list & stats)
- *
- * FIX v5 (Prisma layer):
- *   - POST /summary: simpan summary + rootCause untuk SEMUA type (INCIDENT & TICKETING)
- *   - POST /timeline/append: atomic $executeRaw COALESCE+concat via chr(10) — no race condition
- *   - Semua route static sebelum /:id (route order kritis)
- *   - try-catch semua Discord calls (non-blocking)
- */
-
 "use strict";
 
 const router  = require("express").Router();
@@ -25,9 +10,10 @@ const { validateApiKey } = require("../middleware/auth");
 const { getTicketMode }  = require("../utils/ticket");
 const { sendEmail, buildConfirmationEmail } = require("../services/email.service");
 const { getPublicUrl } = require("../utils/network");
+const RecommendationService = require("../services/recommendation.service");
+const IncidentService       = require("../services/incident.service");
 
 // ---- Helpers ----------------------------------------------------------------
-
 function serialize(data) {
   return JSON.parse(JSON.stringify(data, (_, v) =>
     typeof v === "bigint" ? Number(v) : v
@@ -47,8 +33,6 @@ function discordAsync(fn) {
 // ============================================================================
 // STATIC ROUTES — harus PERTAMA sebelum /:id
 // ============================================================================
-
-// GET /api/tickets — list semua tiket + filter & pagination
 router.get("/", validateApiKey, async (req, res) => {
   try {
     const { status, type, search, limit = 50, offset = 0 } = req.query;
@@ -162,9 +146,6 @@ router.get("/stats", validateApiKey, async (req, res) => {
 
 // ============================================================================
 // CORE API STATIC ROUTES
-// ============================================================================
-
-// POST /api/ticket/summary — AI menyimpan summary & root cause setelah tiket selesai
 router.post("/summary", validateApiKey, async (req, res) => {
   try {
     const { ticketId, summary, rootCause, keywords, force } = req.body;
@@ -178,7 +159,6 @@ router.post("/summary", validateApiKey, async (req, res) => {
       console.warn(`[TICKET] POST /summary: Ticket #${ticketId} mode=${mode} — saving anyway (N8N trusted source)`);
     }
 
-    // Jika summary sudah ada di DB => cek Discord sync saja
     if (ticket.summaryTicket?.trim() && !force) {
       try {
         const outOfSync = await DiscordService.isDiscordOutOfSync(ticket);
@@ -192,11 +172,6 @@ router.post("/summary", validateApiKey, async (req, res) => {
       }
     }
 
-    // FIX: conditional per type — identik dengan original index.js
-    // INCIDENT:  summary_ticket => tampil sebagai **Handling:** di Discord
-    //            root_cause     => disimpan ke DB, TIDAK tampil di pinned Discord
-    // TICKETING: summary_ticket => tampil sebagai **Summary:** di Discord
-    //            root_cause disimpan ke DB, TIDAK tampil di pinned Discord
     const isIncident = ticket.type === "INCIDENT";
     const updateData = {};
 
@@ -204,9 +179,6 @@ router.post("/summary", validateApiKey, async (req, res) => {
       updateData.summary_ticket = summary.trim();
     }
 
-    // FIX: rootCause disimpan untuk SEMUA jenis ticket (INCIDENT dan TICKETING)
-    // WF1 CLOSING mode selalu generate rootCause untuk kedua jenis ticket.
-    // Di Discord: root_cause TIDAK tampil di pinned message (hanya di DB + chatbot).
     if (rootCause?.trim() && rootCause !== "null") {
       updateData.root_cause = rootCause.trim();
     }
@@ -263,15 +235,6 @@ router.post("/summary", validateApiKey, async (req, res) => {
 });
 
 // POST /api/ticket/timeline/append — AI append timeline entries
-//
-// FIX (Prisma layer — atomic append):
-//   Race condition: read-then-write (findById -> build -> update) rentan overwrite
-//   jika N8N kirim 2 request hampir bersamaan.
-//   Solusi: $executeRaw COALESCE+concat dalam 1 SQL statement (atomic di PostgreSQL).
-//   Gunakan chr(10) sebagai newline — menghindari escape ambiguity di tagged template.
-//
-//   INCIDENT  -> timeline_action_taken   (tampil "Action Taken" di pinned Discord)
-//   TICKETING -> timeline_tindak_lanjut  (tampil "Tindak Lanjut" di pinned Discord)
 router.post("/timeline/append", validateApiKey, async (req, res) => {
   try {
     const { ticketId, ticketType, newTimeline } = req.body;
@@ -281,7 +244,6 @@ router.post("/timeline/append", validateApiKey, async (req, res) => {
     const ticket = await TicketModel.findById(ticketId);
     if (!ticket) return res.status(404).json({ error: `Ticket #${ticketId} not found` });
 
-    // INCIDENT -> action_taken | TICKETING -> tindak_lanjut
     const isIncident   = (ticketType || ticket.type) === "INCIDENT";
     const entries      = Array.isArray(newTimeline) ? newTimeline : [newTimeline];
     const validEntries = entries.filter((e) => e && e.datetime && e.action);
@@ -290,13 +252,11 @@ router.post("/timeline/append", validateApiKey, async (req, res) => {
       return res.status(400).json({ error: "newTimeline: entry tidak valid (butuh datetime + action)" });
     }
 
-    // Hitung entry existing untuk index lanjutan
     const currentVal = isIncident
       ? (ticket.timelineActionTaken  || ticket.timeline_action_taken  || "")
       : (ticket.timelineTindakLanjut || ticket.timeline_tindak_lanjut || "");
     const currentCount = currentVal.split("\n").filter((l) => l.trim()).length;
 
-    // Build teks yang akan di-append
     let idx = currentCount + 1;
     const appendText = validEntries.map((e) => {
       const line = `${idx}. (${e.datetime}) ${e.action}`;
@@ -304,10 +264,6 @@ router.post("/timeline/append", validateApiKey, async (req, res) => {
       return line;
     }).join("\n");
 
-    // Atomic APPEND via $executeRaw — 1 SQL statement, no race condition window.
-    // chr(10) = newline character — aman di Prisma tagged template (no escape needed).
-    // INCIDENT  -> update timeline_action_taken
-    // TICKETING -> update timeline_tindak_lanjut
     if (isIncident) {
       await prisma.$executeRaw`
         UPDATE tickets
@@ -334,10 +290,8 @@ router.post("/timeline/append", validateApiKey, async (req, res) => {
       `;
     }
 
-    // Reload fresh dari DB setelah atomic update
     const updatedTicket = await TicketModel.findById(ticketId);
 
-    // Sync Discord pinned message (non-blocking)
     discordAsync(() => DiscordService.updateTicketMessage(updatedTicket));
 
     await ActivityModel.create({
@@ -386,11 +340,8 @@ router.post("/repair-discord", validateApiKey, async (req, res) => {
 router.post("/auto-create", validateApiKey, async (req, res) => {
   try {
     const { title, description, keywords, formFields, createdBy } = req.body;
-    // FIX: normalize type — N8N lama (Sequelize era) mengirim type="SUPPORT"
-    // Prisma version hanya mengenal "TICKETING" atau "INCIDENT".
-    // Normalisasi di sini agar N8N workflow lama tidak perlu diubah.
     let type = req.body.type;
-    if (type === "SUPPORT") type = "TICKETING";   // backward compat
+    if (type === "SUPPORT") type = "TICKETING";
 
     if (!type)  return res.status(400).json({ error: "type required (TICKETING atau INCIDENT)" });
     if (!title) return res.status(400).json({ error: "title required" });
@@ -474,7 +425,6 @@ router.post("/find-similar", validateApiKey, async (req, res) => {
 router.post("/create", validateApiKey, async (req, res) => {
   try {
     const { formFields, createdBy, autoCreateDiscord = true } = req.body;
-    // Normalize SUPPORT → TICKETING (backward compat)
     let type = req.body.type;
     if (type === "SUPPORT") type = "TICKETING";
 
@@ -548,8 +498,72 @@ router.post("/create", validateApiKey, async (req, res) => {
       }
     }
 
+    // Smart Recommendation + Incident Detection (non-blocking) ────────
+    setImmediate(async () => {
+      try {
+        const issueText = type === "INCIDENT"
+          ? (formFields["Incident Title"] || formFields["Incident Information"] || "")
+          : (formFields["Issue"] || "");
+
+        if (!issueText.trim()) return;
+
+        const recResult = await RecommendationService.getRecommendation({
+          issueText,
+          keywords:  ticket.searchKeywords || keywords,
+          type,
+          excludeId: ticket.id,  
+        });
+
+        if (recResult.found && discordThread?.threadId) {
+          try {
+            const client = DiscordService.getClient();
+
+            const thread = await client.channels.fetch(discordThread.threadId);
+            if (thread?.isThread()) {
+              const recMsg = RecommendationService.buildDiscordRecommendation(recResult, type);
+              if (recMsg) {
+                await thread.send(recMsg);
+                console.log(`💡 [TICKET/CREATE] Smart Recommendation dikirim ke thread #${discordThread.threadId}`);
+              }
+            }
+
+            const top = recResult.topSuggestion;
+            if (top && config.discord.channelId) {
+              const channel = await client.channels.fetch(config.discord.channelId);
+              if (channel?.isTextBased()) {
+                const icon  = type === "INCIDENT" ? "🚨" : "🎫";
+                const refId = top.source === "ticket" ? `#${top.ticketId}` : top.title;
+                const summary = top.summary
+                  ? String(top.summary).substring(0, 120) + "..."
+                  : (top.content ? String(top.content).substring(0, 120) + "..." : "");
+                const notif = [
+                  `💡 **SMART RECOMMENDATION** — ${icon} Ticket #${ticket.id}`,
+                  `Ditemukan referensi dari kasus sebelumnya (${refId}).`,
+                  summary ? `> ${summary}` : "",
+                  discordThread.threadUrl ? `Lihat detail di thread: ${discordThread.threadUrl}` : "",
+                ].filter(Boolean).join("\n");
+                await channel.send(notif);
+                console.log(`💡 [TICKET/CREATE] Notifikasi Smart Recommendation dikirim ke channel utama`);
+              }
+            }
+          } catch (discordRecErr) {
+            console.warn("[TICKET/CREATE] Gagal kirim recommendation ke Discord (non-fatal):", discordRecErr.message);
+          }
+        }
+
+        const analysis = IncidentService.analyzeForIncident(ticket);
+        if (analysis.isIncident) {
+          console.log(`🚨 [TICKET/CREATE] Incident detected: #${ticket.id} | ${analysis.category}`);
+          IncidentService.processIncident(ticket).catch((e) =>
+            console.warn("[TICKET/CREATE] Incident process error (non-fatal):", e.message)
+          );
+        }
+      } catch (bgErr) {
+        console.warn("[TICKET/CREATE] Background task error (non-fatal):", bgErr.message);
+      }
+    });
+
     // ── Email konfirmasi ke pelapor ───────────────────────────────────────────
-    // Ambil email dari form_fields["Email"] — wajib diisi di form
     const emailTo = (formFields["Email"] || "").trim();
     if (emailTo && emailTo.includes("@")) {
       try {
@@ -557,7 +571,6 @@ router.post("/create", validateApiKey, async (req, res) => {
         const emailSubject = `Konfirmasi Penerimaan Ticket ${type === "INCIDENT" ? "Incident" : "Support"} #${ticket.id}`;
         const emailHtml    = buildConfirmationEmail(ticket, type, portalUrl);
 
-        // Fire-and-forget — tidak blocking response
         sendEmail({ to: emailTo, subject: emailSubject, html: emailHtml })
           .then((info) => {
             if (info) console.log(`✅ [TICKET/CREATE] Email konfirmasi terkirim ke ${emailTo}`);
@@ -566,7 +579,6 @@ router.post("/create", validateApiKey, async (req, res) => {
 
         console.log(`📧 [TICKET/CREATE] Email sedang dikirim ke ${emailTo}...`);
       } catch (emailErr) {
-        // Non-fatal — tiket tetap terbuat
         console.error("[TICKET/CREATE] Email error (non-fatal):", emailErr.message);
       }
     } else {
@@ -587,10 +599,7 @@ router.post("/create", validateApiKey, async (req, res) => {
 });
 
 // ============================================================================
-// DYNAMIC ROUTES — /:id HARUS PALING BAWAH
-// ============================================================================
-
-// GET /api/ticket/:id — detail tiket
+// DYNAMIC ROUTES — /:id 
 router.get("/:id", validateApiKey, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -628,7 +637,7 @@ router.get("/:id", validateApiKey, async (req, res) => {
   }
 });
 
-// PUT /api/ticket/:id/status — update status dari Peppermint Portal
+// PUT /api/ticket/:id/status — update status dari Portal
 router.put("/:id/status", validateApiKey, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -740,10 +749,6 @@ router.put("/:id/assign", validateApiKey, async (req, res) => {
 });
 
 // POST /api/ticket/:id/sync-discord
-// Dipanggil dari portal admin setelah DB update selesai.
-// Berjalan sebagai background task (frontend tidak menunggu response ini).
-// PENTING: Route ini langsung return 202 Accepted,
-// lalu kerjakan Discord update secara async setelah response dikirim.
 router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -751,14 +756,8 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
 
     const { action, status, assignees } = req.body;
 
-    // ── Return 202 SEGERA — frontend tidak perlu menunggu Discord selesai ──
-    // Discord API bisa memakan waktu 1-5 detik, kita tidak mau block di sini.
     res.status(202).json({ accepted: true, ticketId: id, action });
 
-    // ── Semua pekerjaan berat di bawah ini berjalan SETELAH response dikirim ──
-    // Jika terjadi error di bawah, tidak akan mempengaruhi response ke frontend.
-
-    // Ambil ticket terbaru dari DB (fresh setelah update dari frontend)
     let ticket;
     try {
       ticket = await TicketModel.findById(id);
@@ -773,10 +772,8 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
 
     const discord = ticket.discord || ticket.discordData || {};
 
-    // ── 1. Update Discord pinned message + thread title (paralel) ───────────
     if (discord.threadId) {
       try {
-        // Jalankan keduanya paralel — lebih cepat dari sequential
         await Promise.all([
           DiscordService.updateThreadTitle(ticket),
           DiscordService.updateTicketMessage(ticket),
@@ -784,15 +781,11 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
         console.log(`✅ [SYNC-DISCORD] Ticket #${id} Discord updated (action: ${action})`);
       } catch (discordErr) {
         console.error(`❌ [SYNC-DISCORD] Discord update failed #${id}:`, discordErr.message);
-        // Tidak re-throw — lanjut ke step berikutnya
       }
     } else {
       console.log(`⚠️ [SYNC-DISCORD] Ticket #${id} tidak punya Discord thread — skip Discord sync`);
     }
 
-    // ── 2. Trigger N8N CLOSING jika status DONE/RESOLVED ────────────────────
-    // Sama seperti perilaku bot saat !status done/resolved
-    // Hanya trigger jika summary belum ada (jika sudah ada, cukup update Discord)
     const currentStatus = ticket.statusPengusulan || ticket.status_pengusulan;
     const isClosing     = currentStatus === "DONE" || currentStatus === "RESOLVED";
 
@@ -800,7 +793,6 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
       const hasSummary = !!(ticket.summaryTicket || ticket.summary_ticket);
 
       if (hasSummary) {
-        // Summary sudah ada — pastikan Discord sinkron (repair jika perlu)
         console.log(`ℹ️ [SYNC-DISCORD] Ticket #${id} CLOSING — summary exists, checking Discord sync`);
         try {
           const outOfSync = await DiscordService.isDiscordOutOfSync(ticket);
@@ -812,7 +804,6 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
           console.error(`❌ [SYNC-DISCORD] Repair failed #${id}:`, repairErr.message);
         }
       } else {
-        // Summary belum ada — trigger N8N untuk generate summary + rootCause
         console.log(`🔔 [SYNC-DISCORD] Ticket #${id} CLOSING — triggering N8N for summary generation`);
         try {
           const N8NService = require("../services/n8n.service");
@@ -837,7 +828,6 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
       }
     }
 
-    // ── 3. Log aktivitas ─────────────────────────────────────────────────────
     try {
       const actionLabel = {
         status_update:      "Status diperbarui via Portal Admin",
@@ -856,7 +846,6 @@ router.post("/:id/sync-discord", validateApiKey, async (req, res) => {
     }
 
   } catch (err) {
-    // Hanya terkena jika error sebelum res.status(202) dikirim
     if (!res.headersSent) {
       console.error("[TICKET] POST /:id/sync-discord error:", err.message);
       res.status(500).json({ error: err.message });

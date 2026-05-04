@@ -1,20 +1,9 @@
-/**
- * src/database/client.js
- * Prisma Client — Singleton
- *
- * Pattern singleton memastikan satu connection pool
- * per proses Node.js, termasuk saat nodemon hot-reload.
- */
-
 "use strict";
-
 const { PrismaClient } = require("@prisma/client");
 const config           = require("../config");
 
 // ─── Singleton ───────────────────────────────────────────────────────────────
-
 const globalRef = globalThis;
-
 const prisma =
   globalRef.__prisma ??
   new PrismaClient({
@@ -28,7 +17,6 @@ if (config.isDev) {
 }
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
-
 async function disconnect() {
   try {
     await prisma.$disconnect();

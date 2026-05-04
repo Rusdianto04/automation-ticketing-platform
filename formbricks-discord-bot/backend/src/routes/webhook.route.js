@@ -1,19 +1,3 @@
-/**
- * src/routes/webhook.route.js
- * Formbricks Webhook Route
- *
- * POST /webhook/formbricks
- *   Menerima submission dari Formbricks, membuat tiket,
- *   membuka thread Discord, dan mengirim email konfirmasi.
- *
- * FIX v2:
- *   - Discord createTicketThread diisolasi dalam try-catch sendiri
- *     → Email konfirmasi SELALU terkirim meski Discord gagal (Missing Permissions, dsb)
- *     → Webhook SELALU return { ok: true } selama DB berhasil — tidak 500 karena Discord error
- *   - Tambah logging untuk field extraction agar mudah debug payload Formbricks
- *   - Email recipient diambil dari multiple field candidates
- */
-
 "use strict";
 
 const router  = require("express").Router();
@@ -23,39 +7,37 @@ const SubmissionModel = require("../models/submission.model");
 const ActivityModel   = require("../models/activity.model");
 const DiscordService  = require("../services/discord.service");
 const { sendEmail, buildConfirmationEmail } = require("../services/email.service");
-const { normalizeTicket, cleanValue } = require("../utils/ticket");
+const { cleanValue } = require("../utils/ticket");
 const { getPublicUrl } = require("../utils/network");
-const RecommendationService = require("../services/recommendation.service"); 
-const IncidentService       = require("../services/incident.service");      
+const RecommendationService = require("../services/recommendation.service");
+const IncidentService       = require("../services/incident.service");
 
-// Static Form field names (digunakan oleh static portal — tanpa Formbricks)
-const STATIC_TICKETING_FIELDS = [
-  "Reporter Information",
-  "Division",
-  "No Telepon",
-  "Email",
-  "ID Device",
-  "Ruangan",
-  "Lantai",
-  "Tanggal & Waktu Pemohon",
-  "Type of Support Requested",
-  "Issue",
-  "Jumlah Barang",
-  "Attachment",
+// ─── Formbricks Field Mappings ────────────────────────────────────────────────
+const TICKETING_FIELDS = [
+  ["Reporter Information", "Reporter Information"],
+  ["Division",             "Division"],
+  ["No Telepon",           "No Telepon"],
+  ["Email",                "Email"],
+  ["ID Device",                    "ID Device"],
+  ["Ruangan",                      "Ruangan"],
+  ["Lantai",                       "Lantai"],
+  ["Tanggal & Waktu Pemohon",      "Tanggal & Waktu Pemohon"],
+  ["Type of Support Requested",    "Type of Support Requested"],
+  ["Issue",                        "Issue"],
+  ["Jumlah Barang",                "Jumlah Barang"],
+  ["Attachment",                   "Attachment"],
 ];
 
-const STATIC_INCIDENT_FIELDS = [
-  "Incident Title",
-  "Incident Information",
-  "Date & Time Incident",
-  "Priority Incident",
-  "Severity Incident",
-  "Suspect Area",
-  "Indicated Issue",
-  "Attachment",
+const INCIDENT_FIELDS = [
+  ["Incident Title",       "Incident Title"],
+  ["Incident Information", "Incident Information"],
+  ["Date & Time Incident", "Date & Time Incident"],
+  ["Priority Incident",    "Priority Incident"],
+  ["Severity Incident",    "Severity Incident"],
+  ["Suspect Area",         "Suspect Area"],
+  ["Indicated Issue",      "Indicated Issue"],
+  ["Attachment",           "Attachment"],
 ];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractFormId(body) {
   if (!body) return null;
@@ -82,8 +64,45 @@ function detectFormType(body, answers) {
 }
 
 /**
+ * Ekstrak form fields dari payload Formbricks secara fleksibel.
+ * @param {object} formData   — parsed payload dari body
+ * @param {string} type       — "TICKETING" | "INCIDENT"
+ * @returns {object}          — { "Label": "value" }
+ */
+function extractFormFields(formData, type) {
+  const fieldsOrdered = type === "INCIDENT" ? INCIDENT_FIELDS : TICKETING_FIELDS;
+  const result = {};
+
+  for (const [fieldId, label] of fieldsOrdered) {
+    const raw = formData[fieldId]
+      ?? formData[label]
+      ?? (formData.answers && (formData.answers[fieldId] ?? formData.answers[label]))
+      ?? null;
+
+    const cleaned = cleanValue(raw);
+    if (cleaned) result[label] = cleaned;
+  }
+
+  // ── Pendekatan 2: Jika masih kosong, coba ambil semua key-value yang ada ──
+  if (Object.keys(result).length === 0) {
+    const allLabels = new Set(fieldsOrdered.map(([, label]) => label));
+    for (const [key, val] of Object.entries(formData)) {
+      if (["surveyId", "userId", "finished", "meta", "createdAt"].includes(key)) continue;
+      const cleaned = cleanValue(val);
+      if (!cleaned) continue;
+      if (allLabels.has(key)) {
+        result[key] = cleaned;
+      } else {
+        result[key] = cleaned;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Cari email recipient dari berbagai kemungkinan field.
- * Formbricks terkadang menyimpan field "Email" di berbagai path.
  */
 function extractEmailRecipient(formFields, rawAnswers) {
   // Prioritas 1: dari formFields yang sudah diparsing
@@ -100,30 +119,7 @@ function extractEmailRecipient(formFields, rawAnswers) {
   return null;
 }
 
-function buildRecommendationMsg(result) {
-  if (!result?.found) return null;
-  const lines = [];
-  lines.push("💡 **SMART RECOMMENDATION**");
-  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  if (result.similarTickets?.length > 0) {
-    lines.push(`📋 **Kasus Serupa (${result.similarTickets.length}):**`);
-    result.similarTickets.slice(0, 3).forEach((t) => {
-      lines.push(`  • **#${t.ticketId}** — ${(t.title || t.issue || "").substring(0, 80)}`);
-      if (t.summary) lines.push(`    ↳ ${String(t.summary).substring(0, 150)}`);
-    });
-  }
-  const top = result.topSuggestion;
-  if (top?.summary) lines.push(`\n✅ **Solusi Referensi:**\n${String(top.summary).substring(0, 300)}`);
-  if (result.runbooks?.length > 0) {
-    lines.push(`\n📖 **Runbook:**`);
-    result.runbooks.slice(0, 2).forEach((r) => lines.push(`  • [${r.category}] ${r.title}`));
-  }
-  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  return lines.join("\n");
-}
-
 // ─── Route ───────────────────────────────────────────────────────────────────
-
 router.post("/formbricks", async (req, res) => {
   // ── Step 1: Parse payload ─────────────────────────────────────────────────
   const body    = req.body || {};
@@ -143,17 +139,11 @@ router.post("/formbricks", async (req, res) => {
     console.log("✅ [WEBHOOK] Submission saved");
   } catch (subErr) {
     console.error("⚠ [WEBHOOK] Failed to save raw submission (non-fatal):", subErr.message);
-    // Non-fatal — lanjut proses
   }
 
   // ── Step 3: Extract form fields ───────────────────────────────────────────
-  const fieldsOrdered = type === "INCIDENT" ? INCIDENT_FIELDS : TICKETING_FIELDS;
-  const formFields    = {};
-  for (const [fieldId, label] of fieldsOrdered) {
-    const raw = formData[fieldId] || (formData.answers && formData.answers[fieldId]);
-    formFields[label] = cleanValue(raw) || null;
-  }
-  console.log(`   +- Fields   : ${Object.entries(formFields).filter(([, v]) => v).map(([k]) => k).join(", ") || "(none extracted)"}`);
+  const formFields = extractFormFields(formData, type);
+  console.log(`   +- Fields extracted: ${Object.keys(formFields).filter((k) => formFields[k]).join(", ") || "(none)"}`);
 
   // ── Step 4: Create ticket (BLOCKING — harus berhasil) ────────────────────
   let ticket;
@@ -172,16 +162,13 @@ router.post("/formbricks", async (req, res) => {
       description: `Ticket created from ${formId}`,
     });
 
-    console.log(`✅ [WEBHOOK] Ticket created: ${ticket.id}`);
+    console.log(`✅ [WEBHOOK] Ticket #${ticket.id} created (${type})`);
   } catch (dbErr) {
-    // DB error: ini memang fatal — tidak bisa lanjut
     console.error("❌ [WEBHOOK] DB error creating ticket:", dbErr.message);
     return res.status(500).json({ error: "Failed to create ticket", detail: dbErr.message });
   }
 
-  // ── Step 5: Discord thread (NON-BLOCKING — tidak boleh crash webhook) ─────
-  // FIX: Discord diisolasi di sini. Error Missing Permissions, rate limit, dsb
-  // tidak boleh menyebabkan email gagal terkirim atau webhook return 500.
+  // ── Step 5: Discord thread (non-blocking — tidak boleh crash webhook) ─────
   let discordResult = { ok: false, threadUrl: null, threadId: null, error: null };
   try {
     const { thread, infoMessage, overflowIds, commandsMessage } =
@@ -189,11 +176,11 @@ router.post("/formbricks", async (req, res) => {
 
     ticket = await TicketModel.update(ticket.id, {
       discord: {
-        infoMessageId:     infoMessage.id,
-        commandsMessageId: commandsMessage?.id ?? null,
-        threadId:          thread.id,
-        threadUrl:         thread.url,
-        channelId:         config.discord.channelId,
+        infoMessageId:      infoMessage.id,
+        commandsMessageId:  commandsMessage?.id ?? null,
+        threadId:           thread.id,
+        threadUrl:          thread.url,
+        channelId:          config.discord.channelId,
         overflowMessageIds: overflowIds ?? [],
       },
     });
@@ -207,7 +194,6 @@ router.post("/formbricks", async (req, res) => {
     discordResult = { ok: true, threadUrl: thread.url, threadId: thread.id, error: null };
     console.log(`✅ [WEBHOOK] Discord thread created: ${thread.url}`);
   } catch (discordErr) {
-    // Catat error tapi JANGAN throw — email harus tetap terkirim
     discordResult.error = discordErr.message;
     console.error("⚠ [WEBHOOK] Discord thread gagal (ticket tetap tersimpan di DB):");
     console.error(`   Error : ${discordErr.message}`);
@@ -218,7 +204,6 @@ router.post("/formbricks", async (req, res) => {
       console.error("            Di Discord → Channel Settings → Permissions → Bot Role → ✅ Manage Messages");
     }
 
-    // Simpan activity bahwa Discord gagal
     try {
       await ActivityModel.create({
         ticketId:    ticket.id,
@@ -228,42 +213,54 @@ router.post("/formbricks", async (req, res) => {
     } catch (_) {}
   }
 
-  // ── Step 5.5: Smart Intake — Recommendation + Incident (non-blocking) ────
-  let recommendationResult = { found: false, similarTickets: [], runbooks: [], topSuggestion: null };
-  try {
-    const issueText = type === "INCIDENT"
-      ? (formFields["Incident Information"] || formFields["Incident Title"] || "")
-      : (formFields["Issue"] || "");
-    if (issueText.trim()) {
-      recommendationResult = await RecommendationService.getRecommendation({
-        issueText,
-        keywords: ticket.searchKeywords || ticket.search_keywords || [],
-        type,
-      });
-      if (recommendationResult.found && discordResult.ok && discordResult.threadId) {
-        try {
-          const thread = await DiscordService.getClient().channels.fetch(discordResult.threadId);
-          if (thread?.isThread()) {
-            const recMsg = buildRecommendationMsg(recommendationResult);
-            if (recMsg) await thread.send(recMsg);
-          }
-        } catch (_) {}
-      }
-    }
-  } catch (_) {}
+  // ── Step 5.5: Smart Recommendation → Discord thread (non-blocking) ────────
+  if (discordResult.ok && discordResult.threadId) {
+    setTimeout(async () => {
+      try {
+        const issueText = type === "INCIDENT"
+          ? (formFields["Incident Information"] || formFields["Incident Title"] || "")
+          : (formFields["Issue"] || "");
+        if (!issueText.trim()) return;
+        const recResult = await RecommendationService.getRecommendation({
+          issueText,
+          keywords:  ticket.searchKeywords || ticket.search_keywords || [],
+          type,
+          excludeId: ticket.id, 
+        });
 
-  let incidentResult = { detected: false, category: "general" };
+        if (!recResult.found) {
+          console.log(`ℹ [WEBHOOK] Tidak ada Smart Recommendation untuk Ticket #${ticket.id}`);
+          return;
+        }
+
+        // Kirim pesan Smart Recommendation ke thread Discord
+        const recMsg = RecommendationService.buildDiscordRecommendation(recResult, type);
+        if (!recMsg) return;
+
+        const thread = await DiscordService.getClient().channels.fetch(discordResult.threadId);
+        if (thread?.isThread()) {
+          await thread.send(recMsg);
+          console.log(`💡 [WEBHOOK] Smart Recommendation terkirim ke thread #${discordResult.threadId} (Ticket #${ticket.id})`);
+        }
+      } catch (recErr) {
+        // Non-fatal — tidak pernah crash webhook atau server
+        console.warn(`⚠ [WEBHOOK] Smart Recommendation error (non-fatal): ${recErr.message}`);
+      }
+    }, 1500);  // delay 1.5 detik — pastikan thread & pinned messages sudah siap
+  }
+
+  // ── Incident detection (non-blocking, fire-and-forget) ────────────────────
   try {
     const analysis = IncidentService.analyzeForIncident(ticket);
     if (analysis.isIncident) {
-      incidentResult = { detected: true, category: analysis.category };
-      IncidentService.processIncident(ticket).catch(() => {});
+      console.log(`🚨 [WEBHOOK] Incident detected: #${ticket.id} | ${analysis.category}`);
+      IncidentService.processIncident(ticket).catch((e) =>
+        console.warn(`⚠ [WEBHOOK] Incident process error (non-fatal): ${e.message}`)
+      );
     }
   } catch (_) {}
 
-  // ── Step 6: Send confirmation email (SELALU — terlepas dari Discord) ──────
-  // FIX: Email dijalankan SETELAH Discord block (sukses maupun gagal)
-  // sehingga email selalu terkirim ke pelapor
+  // ── Step 6: Email konfirmasi (SELALU — terlepas dari Discord) ─────────────
   const emailTo = extractEmailRecipient(formFields, formData);
   if (emailTo) {
     const portalUrl    = getPublicUrl();
@@ -280,19 +277,12 @@ router.post("/formbricks", async (req, res) => {
   }
 
   // ── Step 7: Response ──────────────────────────────────────────────────────
-  // Selalu OK selama tiket berhasil dibuat di DB
   res.json({
-    ok:         true,
-    ticketId:   ticket.id,
-    thread:     discordResult.threadUrl,
-    discord:    discordResult.ok,
-    emailSent:  !!emailTo,
-    recommendation: {
-      found:        recommendationResult.found,
-      similarCount: recommendationResult.similarTickets.length,
-      runbookCount: recommendationResult.runbooks.length,
-    },
-    incident: incidentResult,
+    ok:        true,
+    ticketId:  ticket.id,
+    thread:    discordResult.threadUrl,
+    discord:   discordResult.ok,
+    emailSent: !!emailTo,
   });
 });
 
