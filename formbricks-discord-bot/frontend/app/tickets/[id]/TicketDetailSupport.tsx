@@ -1,221 +1,246 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ArrowLeft, Building2, MapPin, Layers, Hash, Package,
-  Calendar, Wrench, User, Clock, FileSearch, FileText,
-  AlertCircle, Phone, Mail, Monitor, AlignLeft,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import type { Ticket } from "@/types";
-import { StatusBadge, TypeBadge, CardSection, AssigneeList, TimelineSection } from "./SharedComponents";
+import { StatusBadge, CardSection, TimelineSection } from "./SharedComponents";
+
+// ── Interface UserRecommendation — v11 final ──────────────────────────────────
+// Flat structure: 1 layout terpadu, bukan array steps
+interface UserRecommendation {
+  found:       boolean;
+  count:       number;
+  message:     string;
+  summary:     string;          // rangkuman terpadu dari semua kasus serupa
+  actionSteps: string[];        // langkah-langkah bersih tanpa timestamp
+  stepSource:  string;          // "ticket" | nama runbook
+  disclaimer:  string;
+}
 
 interface Props {
-  ticket: Ticket;
-  title: string;
-  requester: string;
-  orgName: string;
-  orgDepartment: string;
-  createdAt: string;
-  updatedAt: string;
+  ticket:             Ticket;
+  title:              string;
+  requester:          string;
+  orgName:            string;
+  orgDepartment:      string;
+  createdAt:          string;
+  updatedAt:          string;
+  userRecommendation?: UserRecommendation | null;
 }
 
 export default function TicketDetailSupport({
-  ticket, title, requester, orgName, orgDepartment, createdAt, updatedAt,
+  ticket, title, requester, orgName, orgDepartment,
+  userRecommendation,
 }: Props) {
-  const f = ticket.form_fields;
-  const status = ticket.status_pengusulan;
+  const f         = ticket.form_fields;
+  const status    = ticket.status_pengusulan;
   const assignees = Array.isArray(ticket.assignee) ? ticket.assignee : [];
 
   const summaryTicket = ticket.summary_ticket || "";
-  const rootCause = ticket.root_cause || "";
-  const timelineRaw = ticket.timeline_tindak_lanjut || null;
+  const rootCause     = ticket.root_cause     || "";
+  const timelineRaw   = ticket.timeline_tindak_lanjut || null;
+
+  const rec    = userRecommendation;
+  const hasRec = rec?.found && (rec.summary || rec.actionSteps?.length > 0);
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen" style={{ background: "#d9e1f2" }}>
 
       {/* ── Header ── */}
       <header
-        className="text-white shadow-lg"
-        style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)" }}
+        className="text-white sticky top-0 z-30"
+        style={{
+          background:   "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}
       >
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 h-16">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 text-[13px] font-medium transition-all group"
-            >
-              <ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
-              Kembali ke Dashboard
-            </Link>
-            <span className="text-slate-600">›</span>
-            <div className="flex items-center gap-2">
-              <TypeBadge type={ticket.type} />
-              <span className="text-white font-bold text-[14px]">#{ticket.id}</span>
+        <div className="w-full px-5 sm:px-8 lg:px-10">
+          <div className="flex items-center justify-between h-20">
+            <div className="flex items-center gap-2 text-[13px]">
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1.5 text-slate-300 hover:text-white transition"
+              >
+                <ArrowLeft size={15} />
+                Kembali ke Dashboard
+              </Link>
+              <ChevronRight size={14} className="text-slate-500" />
+              <span className="font-mono text-indigo-300">#{ticket.id}</span>
             </div>
-            <div className="ml-auto text-right hidden sm:block">
-              <p className="text-[11px] text-white font-semibold">{orgName}</p>
-              <p className="text-[11px] text-white/80">{orgDepartment}</p>
+            <div className="text-right">
+              <p className="text-[12px] font-semibold">{orgName}</p>
+              <p className="text-[11px] text-slate-400">{orgDepartment}</p>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-        {/* ── Title Bar ── */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-5 flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold font-mono text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">
-                #{ticket.id}
-              </span>
-              <TypeBadge type={ticket.type} />
-              <StatusBadge status={status} />
-            </div>
-            <h1 className="text-[18px] font-bold text-slate-800 leading-snug">{title}</h1>
-          </div>
-          <div className="text-right text-[12px] text-slate-400 shrink-0 space-y-1">
-            <div className="flex items-center justify-end gap-1.5">
-              <Clock size={12} />
-              <span>Dibuat: <strong className="text-slate-600">{createdAt}</strong></span>
-            </div>
-            <div className="flex items-center justify-end gap-1.5">
-              <Clock size={12} />
-              <span>Diperbarui: <strong className="text-slate-600">{updatedAt}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-          {/* ── LEFT ── */}
-          <div className="lg:col-span-2 space-y-5">
-
-            {/* ── Data Formulir Support — Issue masuk ke dalam tabel ── */}
-            <CardSection title="Data Formulir Support" icon={<FileSearch size={15} />}>
-              <table className="w-full text-[13px]">
-                <tbody className="divide-y divide-slate-50">
-                  <FieldRow icon={<User size={13} />} label="Reporter Information" value={requester} />
-                  <FieldRow icon={<Building2 size={13} />} label="Division / Departemen" value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                  <FieldRow icon={<Phone size={13} />} label="No Telepon" value={f["No Telepon"] as string} />
-                  <FieldRow icon={<Mail size={13} />} label="Email" value={f["Email"] as string} />
-                  <FieldRow icon={<Monitor size={13} />} label="ID Device" value={f["ID Device"] as string} />
-                  <FieldRow icon={<MapPin size={13} />} label="Ruangan / Lokasi" value={(f["Ruangan"] || f["Room"] || f["Location"]) as string} />
-                  <FieldRow icon={<Layers size={13} />} label="Lantai" value={(f["Lantai"] || f["Floor"]) as string} />
-                  <FieldRow icon={<Calendar size={13} />} label="Tanggal &amp; Waktu Pemohon" value={(f["Tanggal & Waktu Pemohon"] || f["Tanggal"] || f["Date"] || createdAt) as string} />
-                  <FieldRow icon={<Wrench size={13} />} label="Type of Support Requested" value={(f["Type of Support Requested"] || f["Type of Support"] || f["Kategori"]) as string} />
-                  <FieldRow icon={<Package size={13} />} label="Jumlah Barang" value={(f["Jumlah Barang"] || f["Quantity"]) as string} />
-
-                  {/* ── Issue — style menggunakan td colspan, SAMA dengan IncidentFieldRowMultiline ── */}
-                  {(f["Issue"] as string) && (
-                    <tr className="hover:bg-slate-50">
-                      <th className="px-4 py-2.5 text-left align-top w-2/5 bg-slate-50/60">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide pt-0.5">
-                          <span className="text-slate-400"><AlignLeft size={13} /></span>
-                          Issue — Deskripsi Masalah
-                        </div>
-                      </th>
-                      <td className="px-4 py-3">
-                        <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
-                          {f["Issue"] as string}
-                        </p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </CardSection>
-
-            {/* ── AI Summary ── */}
-            <CardSection title="Ringkasan Ticket (AI Summary)" icon={<FileText size={15} />}>
-              {summaryTicket ? (
-                <div className="m-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-400 p-4 text-[13px] text-indigo-900 whitespace-pre-wrap leading-relaxed">
-                  {summaryTicket}
-                </div>
-              ) : (
-                <div className="px-4 py-5 text-[13px] text-slate-400 italic flex items-center gap-2">
-                  <AlertCircle size={14} className="text-slate-300 shrink-0" />
-                  Ringkasan belum tersedia. Akan diisi otomatis setelah proses klasifikasi AI selesai.
-                </div>
-              )}
-            </CardSection>
-
-            {/* ── Root Cause ── */}
-            <CardSection title="Root Cause" icon={<FileSearch size={15} />}>
-              <div className={`m-4 rounded-lg border-l-4 p-4 text-[13px] leading-relaxed ${rootCause
-                  ? "bg-amber-50 border-amber-400 text-amber-800"
-                  : "bg-slate-50 border-slate-300 text-slate-400 italic"
-                }`}>
-                {rootCause || "Root cause belum diisi oleh petugas."}
+        <div className="space-y-5">
+          <CardSection
+            header={
+              <div className="w-full text-center py-2">
+                <h1 className="text-[20px] font-bold text-white">{title}</h1>
+                <p className="text-[12px] text-white/70 mt-1">Ticket Report</p>
               </div>
-            </CardSection>
+            }
+          >
+            <table className="w-full text-[13px]">
+              <tbody className="divide-y divide-slate-100">
 
-            {/* ── Timeline ── */}
-            <CardSection title="Timeline Progress / Tindak Lanjut" icon={<Clock size={15} />}>
-              <TimelineSection items={timelineRaw} />
-            </CardSection>
+                {/* ── Info ── */}
+                <tr>
+                  <td colSpan={2} className="px-5 py-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <InfoBlock label="Reporter"        value={requester} />
+                      <InfoBlock label="Division"        value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
+                      <InfoBlock label="ID Device"       value={f["ID Device"] as string} />
+                      <InfoBlock label="Type of Support" value={(f["Type of Support Requested"] || f["Kategori"]) as string} />
+                      <InfoBlock label="Status"          value={<StatusBadge status={status} />} />
+                      <InfoBlock label="Petugas"         value={<AssigneeInline assignees={assignees} />} />
+                    </div>
+                  </td>
+                </tr>
 
-          </div>
+                {/* ── Summary ── */}
+                <tr>
+                  <td colSpan={2} className="px-5 py-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Summary</h3>
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                      {summaryTicket || "Hasil Belum Ditemukan"}
+                    </p>
+                  </td>
+                </tr>
 
-          {/* ── RIGHT ── */}
-          <div className="space-y-5">
+                {/* ── SMART RECOMMENDATION — 1 Layout Terpadu ──
+                    v12: Simplified — hapus pesan intro & disclaimer
+                    Hanya header + ringkasan + langkah-langkah ── */}
+                {hasRec && (
+                  <tr>
+                    <td colSpan={2} className="px-5 pb-6">
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{ border: "1px solid #e2e8f0" }}
+                      >
+                        {/* ── Card Header ── */}
+                        <div
+                          className="px-4 py-3 flex items-center gap-2"
+                          style={{ background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)" }}
+                        >
+                          <span className="text-white text-[11px] font-bold uppercase tracking-wider">
+                            💡 Panduan Sementara
+                          </span>
+                          <span className="ml-auto text-white/50 text-[10px]">
+                            Berdasarkan kasus serupa
+                          </span>
+                        </div>
 
-            <CardSection title="Informasi Ticket" icon={<Hash size={15} />}>
-              <dl className="px-4 py-3 space-y-3 text-[13px]">
-                <InfoItem label="ID Ticket" value={
-                  <span className="font-mono font-bold text-indigo-600">#{ticket.id}</span>
-                } />
-                <InfoItem label="Status" value={<StatusBadge status={status} />} />
-                <InfoItem label="Type" value={
-                  <span className="font-medium text-slate-700">Ticketing Support</span>
-                } />
-                {(f["Tanggal & Waktu Pemohon"] as string) && (
-                  <InfoItem label="Tgl Pemohon" value={
-                    <span className="text-slate-600 text-[12px]">{f["Tanggal & Waktu Pemohon"] as string}</span>
-                  } />
+                        {/* ── Card Body ── */}
+                        <div className="px-4 py-4 space-y-3" style={{ background: "#f8fafc" }}>
+
+                          {/* Ringkasan singkat (jika ada) */}
+                          {rec!.summary && (
+                            <p
+                              className="text-[12px] text-slate-600 leading-relaxed border-l-4 pl-3"
+                              style={{ borderColor: "#334155" }}
+                            >
+                              {rec!.summary}
+                            </p>
+                          )}
+
+                          {/* Langkah-langkah — numbered, tanpa tanggal/waktu */}
+                          {rec!.actionSteps && rec!.actionSteps.length > 0 && (
+                            <div>
+                              <p
+                                className="text-[10px] font-bold uppercase tracking-wide mb-3"
+                                style={{ color: "#64748b" }}
+                              >
+                                📋 Langkah-langkah yang Dapat Anda Coba:
+                              </p>
+                              <ol className="space-y-2.5">
+                                {rec!.actionSteps.map((action, ai) => (
+                                  <li key={ai} className="flex items-start gap-3">
+                                    {/* Nomor lingkaran */}
+                                    <span
+                                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white mt-0.5"
+                                      style={{ background: "#1e293b", minWidth: "1.5rem" }}
+                                    >
+                                      {ai + 1}
+                                    </span>
+                                    <span className="text-[12px] text-slate-700 leading-relaxed">
+                                      {action}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+
+                          {/* Fallback jika tidak ada konten sama sekali */}
+                          {(!rec!.actionSteps || rec!.actionSteps.length === 0) && !rec!.summary && (
+                            <p className="text-[12px] text-slate-500 italic">
+                              Saat ini belum ada langkah spesifik yang tersedia. Teknisi kami akan segera membantu Anda.
+                            </p>
+                          )}
+
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                 )}
-              </dl>
-            </CardSection>
 
-            <CardSection title="Assignee / Petugas" icon={<User size={15} />}>
-              <AssigneeList assignees={assignees} />
-            </CardSection>
+                {/* ── Root Cause ── */}
+                <tr>
+                  <td colSpan={2} className="px-5 py-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Root Cause</h3>
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                      {rootCause || "Permasalahan Belum Ditemukan"}
+                    </p>
+                  </td>
+                </tr>
 
-          </div>
+                {/* ── Timeline ── */}
+                <tr>
+                  <td colSpan={2} className="px-5 py-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4">Timeline</h3>
+                    <TimelineSection items={timelineRaw} />
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </CardSection>
         </div>
       </main>
     </div>
   );
 }
 
-// ─── Field Row ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function FieldRow({ icon, label, value }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | undefined;
-}) {
+function InfoBlock({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value) return null;
   return (
-    <tr className="hover:bg-slate-50">
-      <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-          <span className="text-slate-400">{icon}</span>
-          {label}
-        </div>
-      </th>
-      <td className="px-4 py-2.5 text-slate-700 font-medium">{value}</td>
-    </tr>
+    <div>
+      <p className="text-[11px] text-slate-400">{label}</p>
+      <div className="text-[13px] font-medium text-slate-700">{value}</div>
+    </div>
   );
 }
 
-// ─── Info Item ─────────────────────────────────────────────────────────────────
-
-function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
+function AssigneeInline({ assignees }: { assignees: any[] }) {
+  if (!assignees || assignees.length === 0)
+    return <span className="text-slate-400 italic">-</span>;
   return (
-    <div className="flex items-start justify-between gap-2">
-      <dt className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5 shrink-0">{label}</dt>
-      <dd className="text-right">{value}</dd>
+    <div className="flex flex-wrap gap-2">
+      {assignees.map((a, i) => {
+        const name = typeof a === "string" ? a : a?.name || a?.username || "Unknown";
+        return (
+          <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] rounded-full">
+            {name}
+          </span>
+        );
+      })}
     </div>
   );
 }

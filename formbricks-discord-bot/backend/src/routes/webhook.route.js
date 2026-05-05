@@ -13,19 +13,20 @@ const RecommendationService = require("../services/recommendation.service");
 const IncidentService       = require("../services/incident.service");
 
 // ─── Formbricks Field Mappings ────────────────────────────────────────────────
+
 const TICKETING_FIELDS = [
-  ["Reporter Information", "Reporter Information"],
-  ["Division",             "Division"],
-  ["No Telepon",           "No Telepon"],
-  ["Email",                "Email"],
-  ["ID Device",                    "ID Device"],
-  ["Ruangan",                      "Ruangan"],
-  ["Lantai",                       "Lantai"],
-  ["Tanggal & Waktu Pemohon",      "Tanggal & Waktu Pemohon"],
-  ["Type of Support Requested",    "Type of Support Requested"],
-  ["Issue",                        "Issue"],
-  ["Jumlah Barang",                "Jumlah Barang"],
-  ["Attachment",                   "Attachment"],
+  ["Reporter Information",       "Reporter Information"],
+  ["Division",                   "Division"],
+  ["No Telepon",                 "No Telepon"],
+  ["Email",                      "Email"],
+  ["ID Device",                  "ID Device"],
+  ["Ruangan",                    "Ruangan"],
+  ["Lantai",                     "Lantai"],
+  ["Tanggal & Waktu Pemohon",    "Tanggal & Waktu Pemohon"],
+  ["Type of Support Requested",  "Type of Support Requested"],
+  ["Issue",                      "Issue"],
+  ["Jumlah Barang",              "Jumlah Barang"],
+  ["Attachment",                 "Attachment"],
 ];
 
 const INCIDENT_FIELDS = [
@@ -38,6 +39,8 @@ const INCIDENT_FIELDS = [
   ["Indicated Issue",      "Indicated Issue"],
   ["Attachment",           "Attachment"],
 ];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractFormId(body) {
   if (!body) return null;
@@ -63,12 +66,6 @@ function detectFormType(body, answers) {
   return "UNKNOWN";
 }
 
-/**
- * Ekstrak form fields dari payload Formbricks secara fleksibel.
- * @param {object} formData   — parsed payload dari body
- * @param {string} type       — "TICKETING" | "INCIDENT"
- * @returns {object}          — { "Label": "value" }
- */
 function extractFormFields(formData, type) {
   const fieldsOrdered = type === "INCIDENT" ? INCIDENT_FIELDS : TICKETING_FIELDS;
   const result = {};
@@ -78,54 +75,43 @@ function extractFormFields(formData, type) {
       ?? formData[label]
       ?? (formData.answers && (formData.answers[fieldId] ?? formData.answers[label]))
       ?? null;
-
     const cleaned = cleanValue(raw);
     if (cleaned) result[label] = cleaned;
   }
 
-  // ── Pendekatan 2: Jika masih kosong, coba ambil semua key-value yang ada ──
+  // Fallback: jika masih kosong ambil semua key-value yang ada
   if (Object.keys(result).length === 0) {
     const allLabels = new Set(fieldsOrdered.map(([, label]) => label));
     for (const [key, val] of Object.entries(formData)) {
       if (["surveyId", "userId", "finished", "meta", "createdAt"].includes(key)) continue;
       const cleaned = cleanValue(val);
       if (!cleaned) continue;
-      if (allLabels.has(key)) {
-        result[key] = cleaned;
-      } else {
-        result[key] = cleaned;
-      }
+      result[key] = cleaned;
     }
   }
 
   return result;
 }
 
-/**
- * Cari email recipient dari berbagai kemungkinan field.
- */
 function extractEmailRecipient(formFields, rawAnswers) {
-  // Prioritas 1: dari formFields yang sudah diparsing
   if (formFields["Email"]?.trim()) return formFields["Email"].trim();
-
-  // Prioritas 2: cari di raw answers dengan berbagai key
   if (rawAnswers && typeof rawAnswers === "object") {
     for (const [, val] of Object.entries(rawAnswers)) {
       const s = String(val || "").trim();
       if (s.includes("@") && s.includes(".")) return s;
     }
   }
-
   return null;
 }
 
 // ─── Route ───────────────────────────────────────────────────────────────────
+
 router.post("/formbricks", async (req, res) => {
   // ── Step 1: Parse payload ─────────────────────────────────────────────────
-  const body    = req.body || {};
-  const answers = body.answers || body.data || body.response || body || {};
-  const formId  = extractFormId(body) || extractFormId(answers) || "unknown_form";
-  const type    = detectFormType(body, answers);
+  const body     = req.body || {};
+  const answers  = body.answers || body.data || body.response || body || {};
+  const formId   = extractFormId(body) || extractFormId(answers) || "unknown_form";
+  const type     = detectFormType(body, answers);
   const formData = answers.data || answers || {};
 
   console.log("📥 [WEBHOOK] NEW SUBMISSION");
@@ -145,7 +131,7 @@ router.post("/formbricks", async (req, res) => {
   const formFields = extractFormFields(formData, type);
   console.log(`   +- Fields extracted: ${Object.keys(formFields).filter((k) => formFields[k]).join(", ") || "(none)"}`);
 
-  // ── Step 4: Create ticket (BLOCKING — harus berhasil) ────────────────────
+  // ── Step 4: Create ticket ─────────────────────────────────────────────────
   let ticket;
   try {
     ticket = await TicketModel.create({
@@ -168,7 +154,7 @@ router.post("/formbricks", async (req, res) => {
     return res.status(500).json({ error: "Failed to create ticket", detail: dbErr.message });
   }
 
-  // ── Step 5: Discord thread (non-blocking — tidak boleh crash webhook) ─────
+  // ── Step 5: Discord thread ────────────────────────────────────────────────
   let discordResult = { ok: false, threadUrl: null, threadId: null, error: null };
   try {
     const { thread, infoMessage, overflowIds, commandsMessage } =
@@ -198,12 +184,9 @@ router.post("/formbricks", async (req, res) => {
     console.error("⚠ [WEBHOOK] Discord thread gagal (ticket tetap tersimpan di DB):");
     console.error(`   Error : ${discordErr.message}`);
     console.error(`   Code  : ${discordErr.code ?? "N/A"}`);
-
     if (discordErr.code === 50013) {
       console.error("   💡 FIX : Bot perlu permission 'Manage Messages' di channel tersebut.");
-      console.error("            Di Discord → Channel Settings → Permissions → Bot Role → ✅ Manage Messages");
     }
-
     try {
       await ActivityModel.create({
         ticketId:    ticket.id,
@@ -213,19 +196,30 @@ router.post("/formbricks", async (req, res) => {
     } catch (_) {}
   }
 
-  // ── Step 5.5: Smart Recommendation → Discord thread (non-blocking) ────────
+  // ── Step 5.5: Smart Recommendation → DALAM thread saja (non-blocking) ─────
+  //
+  // FIX v11:
+  //   - HANYA kirim ke dalam thread tiket baru (bukan channel utama)
+  //   - Delay 2000ms: pastikan pinned message + commands message sudah terkirim
+  //     sehingga Smart Recommendation menjadi pesan KETIGA di thread
+  //   - threadUrl dari kasus serupa disertakan sebagai link referensi Discord
+  //   - excludeId = ticket.id: tidak rekomendasikan tiket ini sendiri
+  //
   if (discordResult.ok && discordResult.threadId) {
     setTimeout(async () => {
       try {
         const issueText = type === "INCIDENT"
           ? (formFields["Incident Information"] || formFields["Incident Title"] || "")
           : (formFields["Issue"] || "");
+
         if (!issueText.trim()) return;
+
+        // Cari dari tiket LAIN yang sudah DONE/RESOLVED
         const recResult = await RecommendationService.getRecommendation({
           issueText,
           keywords:  ticket.searchKeywords || ticket.search_keywords || [],
           type,
-          excludeId: ticket.id, 
+          excludeId: ticket.id,
         });
 
         if (!recResult.found) {
@@ -233,23 +227,28 @@ router.post("/formbricks", async (req, res) => {
           return;
         }
 
-        // Kirim pesan Smart Recommendation ke thread Discord
-        const recMsg = RecommendationService.buildDiscordRecommendation(recResult, type);
+        // Build pesan — sertakan guildId & channelId untuk konteks link
+        const recMsg = RecommendationService.buildDiscordRecommendation(
+          recResult,
+          type,
+          config.discord.guildId,
+          config.discord.channelId
+        );
         if (!recMsg) return;
 
+        // Kirim ke DALAM thread tiket baru
         const thread = await DiscordService.getClient().channels.fetch(discordResult.threadId);
         if (thread?.isThread()) {
           await thread.send(recMsg);
-          console.log(`💡 [WEBHOOK] Smart Recommendation terkirim ke thread #${discordResult.threadId} (Ticket #${ticket.id})`);
+          console.log(`💡 [WEBHOOK] Smart Recommendation terkirim ke DALAM thread #${discordResult.threadId} (Ticket #${ticket.id})`);
         }
       } catch (recErr) {
-        // Non-fatal — tidak pernah crash webhook atau server
         console.warn(`⚠ [WEBHOOK] Smart Recommendation error (non-fatal): ${recErr.message}`);
       }
-    }, 1500);  // delay 1.5 detik — pastikan thread & pinned messages sudah siap
+    }, 2000);  // delay 2 detik — pinned + commands message sudah siap
   }
 
-  // ── Incident detection (non-blocking, fire-and-forget) ────────────────────
+  // ── Incident detection ────────────────────────────────────────────────────
   try {
     const analysis = IncidentService.analyzeForIncident(ticket);
     if (analysis.isIncident) {
@@ -260,7 +259,7 @@ router.post("/formbricks", async (req, res) => {
     }
   } catch (_) {}
 
-  // ── Step 6: Email konfirmasi (SELALU — terlepas dari Discord) ─────────────
+  // ── Step 6: Email konfirmasi ──────────────────────────────────────────────
   const emailTo = extractEmailRecipient(formFields, formData);
   if (emailTo) {
     const portalUrl    = getPublicUrl();
@@ -273,7 +272,7 @@ router.post("/formbricks", async (req, res) => {
       })
       .catch((err) => console.error(`❌ [WEBHOOK] Email error ke ${emailTo}:`, err.message));
   } else {
-    console.warn(`⚠ [WEBHOOK] Email tidak dikirim — field Email kosong atau tidak ditemukan di payload`);
+    console.warn(`⚠ [WEBHOOK] Email tidak dikirim — field Email kosong`);
   }
 
   // ── Step 7: Response ──────────────────────────────────────────────────────

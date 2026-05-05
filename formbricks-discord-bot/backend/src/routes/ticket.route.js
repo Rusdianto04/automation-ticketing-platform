@@ -499,69 +499,53 @@ router.post("/create", validateApiKey, async (req, res) => {
     }
 
     // Smart Recommendation + Incident Detection (non-blocking) ────────
-    setImmediate(async () => {
-      try {
-        const issueText = type === "INCIDENT"
-          ? (formFields["Incident Title"] || formFields["Incident Information"] || "")
-          : (formFields["Issue"] || "");
+    const discordData = ticket.discord || {};
+    const threadId    = discordData.threadId || discordData.thread_id;
 
-        if (!issueText.trim()) return;
+    if (threadId) {
+      setTimeout(async () => {
+        try {
+          const issueText = type === "INCIDENT"
+            ? (formFields["Incident Title"] || formFields["Incident Information"] || "")
+            : (formFields["Issue"] || "");
 
-        const recResult = await RecommendationService.getRecommendation({
-          issueText,
-          keywords:  ticket.searchKeywords || keywords,
-          type,
-          excludeId: ticket.id,  
-        });
+          if (!issueText.trim()) return;
 
-        if (recResult.found && discordThread?.threadId) {
-          try {
-            const client = DiscordService.getClient();
+          const recResult = await RecommendationService.getRecommendation({
+            issueText,
+            keywords:  ticket.searchKeywords || [],
+            type,
+            excludeId: ticket.id,
+          });
 
-            const thread = await client.channels.fetch(discordThread.threadId);
-            if (thread?.isThread()) {
-              const recMsg = RecommendationService.buildDiscordRecommendation(recResult, type);
-              if (recMsg) {
-                await thread.send(recMsg);
-                console.log(`💡 [TICKET/CREATE] Smart Recommendation dikirim ke thread #${discordThread.threadId}`);
-              }
-            }
+          if (!recResult.found) return;
 
-            const top = recResult.topSuggestion;
-            if (top && config.discord.channelId) {
-              const channel = await client.channels.fetch(config.discord.channelId);
-              if (channel?.isTextBased()) {
-                const icon  = type === "INCIDENT" ? "🚨" : "🎫";
-                const refId = top.source === "ticket" ? `#${top.ticketId}` : top.title;
-                const summary = top.summary
-                  ? String(top.summary).substring(0, 120) + "..."
-                  : (top.content ? String(top.content).substring(0, 120) + "..." : "");
-                const notif = [
-                  `💡 **SMART RECOMMENDATION** — ${icon} Ticket #${ticket.id}`,
-                  `Ditemukan referensi dari kasus sebelumnya (${refId}).`,
-                  summary ? `> ${summary}` : "",
-                  discordThread.threadUrl ? `Lihat detail di thread: ${discordThread.threadUrl}` : "",
-                ].filter(Boolean).join("\n");
-                await channel.send(notif);
-                console.log(`💡 [TICKET/CREATE] Notifikasi Smart Recommendation dikirim ke channel utama`);
-              }
-            }
-          } catch (discordRecErr) {
-            console.warn("[TICKET/CREATE] Gagal kirim recommendation ke Discord (non-fatal):", discordRecErr.message);
-          }
-        }
-
-        const analysis = IncidentService.analyzeForIncident(ticket);
-        if (analysis.isIncident) {
-          console.log(`🚨 [TICKET/CREATE] Incident detected: #${ticket.id} | ${analysis.category}`);
-          IncidentService.processIncident(ticket).catch((e) =>
-            console.warn("[TICKET/CREATE] Incident process error (non-fatal):", e.message)
+          const recMsg = RecommendationService.buildDiscordRecommendation(
+            recResult,
+            type,
+            config.discord?.guildId,
+            config.discord?.channelId
           );
+          if (!recMsg) return;
+
+          const thread = await DiscordService.getClient().channels.fetch(threadId);
+          if (thread?.isThread()) {
+            await thread.send(recMsg);
+            console.log(`💡 [TICKET/CREATE] Smart Recommendation terkirim ke thread #${threadId}`);
+          }
+        } catch (bgErr) {
+          console.warn("[TICKET/CREATE] Smart Recommendation error (non-fatal):", bgErr.message);
         }
-      } catch (bgErr) {
-        console.warn("[TICKET/CREATE] Background task error (non-fatal):", bgErr.message);
+      }, 2000);
+    }
+
+    // Incident detection
+    try {
+      const analysis = IncidentService.analyzeForIncident(ticket);
+      if (analysis.isIncident) {
+        IncidentService.processIncident(ticket).catch(() => {});
       }
-    });
+    } catch (_) {}
 
     // ── Email konfirmasi ke pelapor ───────────────────────────────────────────
     const emailTo = (formFields["Email"] || "").trim();

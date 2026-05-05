@@ -4,7 +4,6 @@ const path = require("path");
 require("dotenv").config();
 
 // ─── Validation ──────────────────────────────────────────────────────────────
-
 const REQUIRED_VARS = ["DISCORD_BOT_TOKEN", "DISCORD_CHANNEL_ID", "DATABASE_URL"];
 
 const missing = REQUIRED_VARS.filter((v) => !process.env[v]);
@@ -14,7 +13,6 @@ if (missing.length > 0) {
 }
 
 // ─── Config Object ───────────────────────────────────────────────────────────
-
 const config = {
   // App
   env:   process.env.NODE_ENV || "production",

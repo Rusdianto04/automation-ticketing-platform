@@ -27,10 +27,6 @@ function overlapScore(kw1 = [], kw2 = []) {
   return union === 0 ? 0 : inter / union;
 }
 
-/**
- * Hitung skor kontekstual antara issueText baru dengan tiket lama.
- * Lebih akurat dari pure keyword overlap — mempertimbangkan panjang teks.
- */
 function contextScore(issueText, row) {
   const ff     = (typeof row.form_fields === "string" ? JSON.parse(row.form_fields) : row.form_fields) || {};
   const target = [
@@ -48,7 +44,6 @@ function contextScore(issueText, row) {
   let hits = 0;
   for (const kw of sourceKw) {
     if (targetSet.has(kw)) hits++;
-    // Partial match: jika kw adalah substring dari keyword target
     else if ([...targetSet].some((tk) => tk.includes(kw) || kw.includes(tk))) hits += 0.5;
   }
   return hits / sourceKw.length;
@@ -56,8 +51,7 @@ function contextScore(issueText, row) {
 
 // ---------------------------------------------------------------------------
 // Core: findSimilarTickets
-// FIX v10: Gunakan ANY(ARRAY[...]) bukan && operator (type mismatch)
-//          Tambah minimum threshold, excludeId, multi-layer fallback
+// FIX v11: Tambah discord column di SELECT untuk mendapatkan threadUrl referensi
 // ---------------------------------------------------------------------------
 
 async function findSimilarTickets({
@@ -77,25 +71,25 @@ async function findSimilarTickets({
   const excludeClause = excludeId ? `AND id != ${Number(excludeId)}` : "";
   const typeFilter    = type ? `AND type = '${type.replace(/'/g, "''")}'` : "";
 
-  // Bangun kondisi ANY per keyword — type-safe untuk varchar[]
   const anyConditions = allKw.slice(0, 8)
     .map((kw) => `'${kw.replace(/'/g, "''")}'  = ANY(search_keywords)`)
     .join(" OR ");
 
-  // Bangun kondisi ILIKE untuk fallback
   const ilikeParts = allKw.slice(0, 5)
     .map((kw) => `(COALESCE(form_fields->>'Issue','') ILIKE '%${kw.replace(/'/g, "''")}%' OR COALESCE(form_fields->>'Incident Information','') ILIKE '%${kw.replace(/'/g, "''")}%' OR COALESCE(summary_ticket,'') ILIKE '%${kw.replace(/'/g, "''")}%')`)
     .join(" OR ");
 
   let rows = [];
 
-  // ── Layer 1: ANY match pada search_keywords (varchar-safe) ───────────────
+  // ── Layer 1: ANY match pada search_keywords ───────────────────────────────
+  // FIX v11: tambah discord column untuk ambil threadUrl referensi
   try {
     rows = await prisma.$queryRawUnsafe(`
       SELECT
         id, type, form_fields, summary_ticket, root_cause,
         timeline_tindak_lanjut, timeline_action_taken,
-        search_keywords, status_pengusulan, resolved_at, updated_at
+        search_keywords, status_pengusulan, resolved_at, updated_at,
+        discord
       FROM tickets
       WHERE status_pengusulan IN ('DONE','RESOLVED')
         ${excludeClause}
@@ -115,7 +109,8 @@ async function findSimilarTickets({
         SELECT
           id, type, form_fields, summary_ticket, root_cause,
           timeline_tindak_lanjut, timeline_action_taken,
-          search_keywords, status_pengusulan, resolved_at, updated_at
+          search_keywords, status_pengusulan, resolved_at, updated_at,
+          discord
         FROM tickets
         WHERE status_pengusulan IN ('DONE','RESOLVED')
           ${excludeClause}
@@ -131,7 +126,7 @@ async function findSimilarTickets({
     }
   }
 
-  // ── Layer 3: FTS fallback bahasa Indonesia ────────────────────────────────
+  // ── Layer 3: FTS fallback ─────────────────────────────────────────────────
   if (rows.length < 2 && issueText.trim().length > 3) {
     try {
       const searchText = allKw.slice(0, 5).join(" ");
@@ -139,7 +134,8 @@ async function findSimilarTickets({
         SELECT
           id, type, form_fields, summary_ticket, root_cause,
           timeline_tindak_lanjut, timeline_action_taken,
-          search_keywords, status_pengusulan, resolved_at, updated_at
+          search_keywords, status_pengusulan, resolved_at, updated_at,
+          discord
         FROM tickets
         WHERE status_pengusulan IN ('DONE','RESOLVED')
           ${excludeClause}
@@ -161,19 +157,22 @@ async function findSimilarTickets({
 
   if (rows.length === 0) return [];
 
-  // ── Scoring & ranking ─────────────────────────────────────────────────────
-  const MIN_SCORE = 0.1; // threshold minimum — jangan tampilkan jika tidak relevan
+  const MIN_SCORE = 0.1;
 
   const scored = rows.map((r) => {
     const dbKw  = Array.isArray(r.search_keywords) ? r.search_keywords : [];
     const kwSc  = overlapScore(allKw, dbKw);
     const ctxSc = contextScore(issueText, r);
-    const score = Math.max(kwSc, ctxSc * 0.8); // ambil yang terbaik
+    const score = Math.max(kwSc, ctxSc * 0.8);
 
     const ff    = (typeof r.form_fields === "string" ? JSON.parse(r.form_fields) : r.form_fields) || {};
     const title = r.type === "INCIDENT"
       ? (ff["Incident Title"] || ff["Incident Information"] || "Incident")
       : (ff["Issue"] || "Support Ticket");
+
+    // FIX v11: ambil threadUrl dari discord JSONB
+    const discordData = (typeof r.discord === "string" ? JSON.parse(r.discord) : r.discord) || {};
+    const threadUrl   = discordData.threadUrl || null;
 
     return {
       ticketId:   Number(r.id),
@@ -185,11 +184,11 @@ async function findSimilarTickets({
         ? r.timeline_action_taken
         : r.timeline_tindak_lanjut,
       resolvedAt: r.resolved_at,
+      threadUrl,   // ← URL Discord thread dari tiket referensi
       score,
     };
   });
 
-  // Filter dengan minimum threshold, sort by score desc
   return scored
     .filter((s) => s.score >= MIN_SCORE)
     .sort((a, b) => b.score - a.score)
@@ -198,7 +197,6 @@ async function findSimilarTickets({
 
 // ---------------------------------------------------------------------------
 // Core: findRunbooks
-// FIX v10: Gunakan ILIKE murni — tidak ada operator && yang bermasalah
 // ---------------------------------------------------------------------------
 
 async function findRunbooks(keywords = [], limit = 3) {
@@ -208,14 +206,12 @@ async function findRunbooks(keywords = [], limit = 3) {
   const kwClean    = keywords.slice(0, 8).map((k) => String(k).toLowerCase().trim()).filter(Boolean);
   const searchText = kwClean.join(" ");
 
-  // ILIKE conditions — menghindari operator && yang type-mismatch
   const ilikeParts = kwClean.slice(0, 4)
     .map((kw) => `(title ILIKE '%${kw.replace(/'/g, "''")}%' OR content ILIKE '%${kw.replace(/'/g, "''")}%')`)
     .join(" OR ");
 
   let rows = [];
 
-  // Layer 1: FTS (lebih akurat)
   try {
     rows = await prisma.$queryRawUnsafe(`
       SELECT id, category, title, content, keywords, usage_count, success_rate
@@ -229,7 +225,6 @@ async function findRunbooks(keywords = [], limit = 3) {
     console.warn("[RECOMMEND] findRunbooks FTS error:", err.message);
   }
 
-  // Layer 2: ILIKE fallback
   if (rows.length === 0 && ilikeParts) {
     try {
       rows = await prisma.$queryRawUnsafe(`
@@ -287,6 +282,7 @@ async function getRecommendation({
             summary:   similarTickets[0].summary,
             rootCause: similarTickets[0].rootCause,
             timeline:  similarTickets[0].timeline,
+            threadUrl: similarTickets[0].threadUrl,
           }
         : hasRunbooks
         ? {
@@ -304,8 +300,20 @@ async function getRecommendation({
 }
 
 // ---------------------------------------------------------------------------
-// Discord Builder — untuk Teknisi (dikirim ke thread setelah pinned message)
+// Discord Builder — HANYA ke dalam thread, strict 1900 char limit
+// FIX v11:
+//   - Max 1900 char (Discord limit 2000, buffer 100)
+//   - Hanya tampilkan topSuggestion + 1-2 referensi judul
+//   - Format runbook langkah-langkah singkat jika ada timeline
+//   - Tidak tampilkan semua similarTickets secara penuh (terlalu panjang)
 // ---------------------------------------------------------------------------
+const DISCORD_MAX = 1900;
+
+function truncate(str, max) {
+  if (!str) return "";
+  const s = String(str);
+  return s.length <= max ? s : s.substring(0, max - 3) + "...";
+}
 
 function buildDiscordRecommendation(result, ticketType = "TICKETING") {
   if (!result || !result.found) return null;
@@ -313,103 +321,226 @@ function buildDiscordRecommendation(result, ticketType = "TICKETING") {
   const isIncident  = ticketType === "INCIDENT";
   const icon        = isIncident ? "🚨" : "💡";
   const headerLabel = isIncident ? "INCIDENT SMART RECOMMENDATION" : "SMART RECOMMENDATION";
-  const simLabel    = isIncident ? "Insiden Serupa" : "Kasus Serupa yang Pernah Diselesaikan";
 
   const lines = [];
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   lines.push(`${icon} **${headerLabel} — untuk Teknisi**`);
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`_Ticket baru masuk. Ditemukan referensi dari kasus serupa:_`);
+  lines.push(`_Ditemukan referensi dari kasus serupa yang sudah diselesaikan:_`);
 
+  // ── Hanya tampilkan judul kasus serupa (tidak detail) ───────────────────
   if (result.similarTickets && result.similarTickets.length > 0) {
+    const simLabel = isIncident ? "Insiden Serupa" : "Kasus Serupa";
     lines.push(`\n📋 **${simLabel} (${result.similarTickets.length}):**`);
     result.similarTickets.slice(0, 3).forEach((t, i) => {
-      lines.push(`\n**${i + 1}.** ${String(t.title || "").substring(0, 80)}`);
-      if (t.summary)   lines.push(`   ↳ ✅ *Solusi:* ${String(t.summary).substring(0, 200)}`);
-      if (t.rootCause) lines.push(`   ↳ 🔍 *Root Cause:* ${String(t.rootCause).substring(0, 150)}`);
-      if (t.timeline)  lines.push(`   ↳ 📅 *Steps:* ${String(t.timeline).substring(0, 150)}`);
+      const titleShort = truncate(t.title, 70);
+      lines.push(`  ${i + 1}. ${titleShort}`);
+      // Tampilkan link Discord thread jika ada (paling berguna untuk teknisi)
+      if (t.threadUrl) lines.push(`     🔗 ${t.threadUrl}`);
     });
   }
 
+  // ── topSuggestion: tampilkan sebagai runbook langkah-langkah singkat ────
   const top = result.topSuggestion;
-  if (top?.source === "ticket" && top.summary) {
-    lines.push(`\n🛠️ **Langkah Penanganan yang Disarankan:**`);
-    lines.push(String(top.summary).substring(0, 400));
-    if (top.rootCause) lines.push(`\n🔍 **Root Cause:** ${String(top.rootCause).substring(0, 250)}`);
-    if (top.timeline)  lines.push(`\n📅 **Action Steps:**\n${String(top.timeline).substring(0, 350)}`);
-  } else if (top?.source === "runbook") {
-    lines.push(`\n📖 **Runbook: ${top.title}** [${top.category}]`);
-    lines.push(String(top.content || "").substring(0, 400));
-  }
+  if (top?.source === "ticket") {
+    lines.push(`\n🛠️ **Referensi Penanganan Terbaik:**`);
+    if (top.summary)   lines.push(truncate(top.summary, 300));
+    if (top.rootCause) lines.push(`🔍 ${truncate(top.rootCause, 150)}`);
 
-  if (result.runbooks && result.runbooks.length > 0) {
-    lines.push(`\n📚 **Knowledge Base Terkait:**`);
-    result.runbooks.slice(0, 2).forEach((r) => {
-      lines.push(`  • [${r.category}] ${r.title}`);
-    });
+    // Parse timeline sebagai numbered steps jika memungkinkan
+    if (top.timeline) {
+      const rawSteps = String(top.timeline).split("\n").filter((l) => l.trim()).slice(0, 4);
+      if (rawSteps.length > 0) {
+        lines.push(`\n📋 **Langkah Penanganan:**`);
+        rawSteps.forEach((step) => lines.push(truncate(step, 120)));
+      }
+    }
+    if (top.threadUrl) lines.push(`\n🔗 **Thread Referensi:** ${top.threadUrl}`);
+  } else if (top?.source === "runbook") {
+    lines.push(`\n📖 **${top.title}** [${top.category}]`);
+    lines.push(truncate(top.content, 300));
   }
 
   lines.push(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`_⚠ Mohon verifikasi relevansi sebelum menerapkan solusi_`);
-  return lines.filter(Boolean).join("\n");
+  lines.push(`_⚠ Verifikasi relevansi sebelum menerapkan_`);
+
+  // Gabungkan dan potong jika melebihi limit
+  const full = lines.filter(Boolean).join("\n");
+  return full.length <= DISCORD_MAX ? full : full.substring(0, DISCORD_MAX - 50) + "\n...\n_[Pesan dipotong — lihat portal admin untuk detail lengkap]_";
 }
 
 // ---------------------------------------------------------------------------
 // User Portal Recommendation
-// FIX v10:
-//   - Tidak tampilkan ticket ID (privacy — user lain tidak perlu tahu)
-//   - Maksimal 2 kasus serupa
-//   - Gunakan rangkuman generik jika ada beberapa kasus serupa
-//   - Threshold relevance: hanya tampil jika similarity cukup tinggi
+// FIX v11:
+//   - Format numbered steps yang mudah dibaca (bukan hanya summary mentah)
+//   - Pisahkan langkah-langkah dari summary jika ada pola numbered list
+//   - Tambah disclaimer yang jelas
+//   - Maksimal 2 kasus, tanpa ID tiket
+// ---------------------------------------------------------------------------
+
+function parseStepsFromText(text) {
+  if (!text) return [];
+  // Coba parse jika ada pola numbered: "1. xxx\n2. xxx"
+  const numbered = text.match(/\d+\.\s+[^\n]+/g);
+  if (numbered && numbered.length >= 2) {
+    return numbered.slice(0, 5).map((s) => s.replace(/^\d+\.\s+/, "").trim());
+  }
+  // Coba parse bullet: "- xxx" atau "• xxx"
+  const bullets = text.match(/[-•]\s+[^\n]+/g);
+  if (bullets && bullets.length >= 2) {
+    return bullets.slice(0, 5).map((s) => s.replace(/^[-•]\s+/, "").trim());
+  }
+  // Fallback: split by newline
+  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 10);
+  return lines.slice(0, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: parse & clean timeline steps (hapus tanggal/waktu)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ambil langkah-langkah dari teks timeline, hapus timestamp/tanggal.
+ * Input:  "1. (12:46 WIB, 30/04/2026) Conducted a check related..."
+ * Output: ["Conducted a check related to the printer device", ...]
+ */
+function cleanTimelineSteps(timelineText) {
+  if (!timelineText) return [];
+  return String(timelineText)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 5)
+    .map((line) => {
+      // Hapus prefix angka: "1. " "2. "
+      let cleaned = line.replace(/^\d+\.\s*/, "");
+      // Hapus timestamp dalam kurung: "(12:46 WIB, 30/04/2026)" atau "(12:46, 30/4/2026)"
+      cleaned = cleaned.replace(/\(\d{1,2}[:.]\d{2}[^)]*\)/g, "");
+      // Hapus format tanggal lain: "30/04/2026" "30-04-2026" "2026-04-30"
+      cleaned = cleaned.replace(/\b\d{1,4}[-/]\d{1,2}[-/]\d{2,4}\b/g, "");
+      // Hapus format WIB/WITA/WIT
+      cleaned = cleaned.replace(/\b(WIB|WITA|WIT)\b/g, "");
+      // Bersihkan whitespace berlebih
+      cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+      // Kapitalisasi huruf pertama
+      if (cleaned.length > 0) cleaned = cleaned[0].toUpperCase() + cleaned.slice(1);
+      return cleaned;
+    })
+    .filter((line) => line.length > 5) // buang baris yang jadi kosong setelah dibersihkan
+    .slice(0, 6); // max 6 langkah
+}
+
+/**
+ * Gabungkan summary dari beberapa tiket serupa menjadi satu teks tunggal.
+ * Deduplicate kalimat yang sangat mirip.
+ */
+function mergeSummaries(tickets) {
+  const allSummaries = tickets
+    .filter((t) => t.summary && t.summary.trim())
+    .map((t) => String(t.summary).trim());
+
+  if (allSummaries.length === 0) return "";
+  if (allSummaries.length === 1) return allSummaries[0].substring(0, 400);
+
+  // Ambil summary terpanjang sebagai basis, tambah info dari yang lain jika berbeda
+  allSummaries.sort((a, b) => b.length - a.length);
+  const base   = allSummaries[0].substring(0, 400);
+  return base;
+}
+
+/**
+ * Gabungkan langkah-langkah dari beberapa tiket serupa, deduplicate.
+ * Hasilnya adalah 1 set langkah terbaik yang mewakili semua kasus.
+ */
+function mergeSteps(tickets) {
+  // Kumpulkan semua langkah dari semua tiket
+  const allSteps = [];
+  const seen     = new Set();
+
+  for (const t of tickets) {
+    const steps = cleanTimelineSteps(t.timeline || "");
+    for (const step of steps) {
+      // Deduplicate: skip jika terlalu mirip dengan yang sudah ada
+      const normalized = step.toLowerCase().replace(/\s+/g, " ");
+      const isDuplicate = [...seen].some((s) => {
+        const sim = s.split(" ").filter((w) => normalized.includes(w)).length;
+        return sim / s.split(" ").length > 0.7; // 70% kata sama = duplikat
+      });
+      if (!isDuplicate && step.length > 5) {
+        allSteps.push(step);
+        seen.add(normalized);
+      }
+    }
+    if (allSteps.length >= 6) break; // max 6 langkah total
+  }
+
+  return allSteps.slice(0, 6);
+}
+
+// ---------------------------------------------------------------------------
+// User Portal Recommendation 
 // ---------------------------------------------------------------------------
 
 function buildUserRecommendation(result) {
   if (!result || !result.found) return null;
 
-  // Filter hanya yang punya summary (ada solusinya)
-  const withSummary = (result.similarTickets || []).filter((t) => t.summary && t.summary.trim());
+  // Kasus serupa yang punya summary
+  const withSummary = (result.similarTickets || []).filter(
+    (t) => t.summary && t.summary.trim()
+  );
 
-  // Jika tidak ada yang punya summary, periksa runbook
-  const hasRunbook  = (result.runbooks || []).length > 0;
+  // Kasus serupa yang punya timeline (untuk langkah-langkah)
+  const withTimeline = (result.similarTickets || []).filter(
+    (t) => t.timeline && t.timeline.trim()
+  );
+
+  const hasRunbook = (result.runbooks || []).length > 0;
 
   if (withSummary.length === 0 && !hasRunbook) return null;
 
-  const steps = [];
+  // ── Gabungkan semua menjadi 1 rangkuman terpadu ───────────────────────────
+  const mergedSummary   = mergeSummaries(withSummary);
+  const mergedSteps     = mergeSteps(withTimeline.length > 0 ? withTimeline : withSummary);
 
-  // Ambil maksimal 2 kasus serupa, TANPA tampilkan ticket ID
-  withSummary.slice(0, 2).forEach((t, i) => {
-    steps.push({
-      type:  "similar",
-      label: i === 0 ? "Solusi yang pernah berhasil" : "Solusi alternatif",
-      hint:  String(t.summary).substring(0, 400),
-    });
-  });
-
-  // Runbook sebagai pelengkap
-  if (hasRunbook && steps.length < 2) {
-    const r = result.runbooks[0];
-    steps.push({
-      type:     "runbook",
-      label:    `Panduan: ${r.title}`,
-      category: r.category,
-      hint:     String(r.content || "").substring(0, 400),
-    });
+  // Jika tidak ada langkah dari timeline, coba dari runbook
+  let runbookSteps = [];
+  let runbookLabel = null;
+  if (mergedSteps.length === 0 && hasRunbook) {
+    const rb     = result.runbooks[0];
+    runbookSteps = cleanTimelineSteps(rb.content || "");
+    runbookLabel = rb.title;
   }
 
-  if (steps.length === 0) return null;
+  const finalSteps = mergedSteps.length > 0 ? mergedSteps : runbookSteps;
+
+  // Tentukan pesan intro berdasarkan jumlah kasus
+  const count   = withSummary.length;
+  let message;
+  if (count === 0 && hasRunbook) {
+    message = "Kami memiliki panduan yang mungkin dapat membantu Anda sementara menunggu teknisi:";
+  } else if (count === 1) {
+    message = "Kami menemukan kasus serupa yang pernah berhasil ditangani. Berikut panduan sementara yang dapat Anda coba:";
+  } else {
+    message = `Kami menemukan ${count} kasus serupa yang pernah berhasil ditangani. Berikut panduan terpadu berdasarkan pengalaman tersebut:`;
+  }
 
   return {
-    found:   true,
-    count:   withSummary.length,
-    steps,
-    message: withSummary.length > 1
-      ? `Kami menemukan ${withSummary.length} kasus serupa yang pernah berhasil ditangani. Berikut ringkasan solusinya:`
-      : "Kami menemukan kasus serupa yang pernah berhasil ditangani. Berikut saran awal yang mungkin membantu:",
+    found:      true,
+    count,
+    message,
+    // 1 rangkuman terpadu — bukan array steps lagi
+    summary:     mergedSummary || (hasRunbook ? String(result.runbooks[0].content || "").substring(0, 400) : ""),
+    actionSteps: finalSteps,
+    stepSource:  mergedSteps.length > 0 ? "ticket" : (runbookLabel || "panduan"),
+    disclaimer:  "Rekomendasi ini adalah panduan sementara berdasarkan kasus serupa. Teknisi kami tetap akan menangani permasalahan Anda secara resmi.",
   };
 }
-
 // ---------------------------------------------------------------------------
-// Technician Portal Recommendation — detail teknis penuh
+// Technician Portal Recommendation — compact dengan accordion concept
+// FIX v11:
+//   - topSuggestion sebagai highlight utama (langsung tampil)
+//   - similarTickets dalam format compact (hanya judul + status)
+//   - Detail per ticket via expandable (frontend handle dengan state)
+//   - Max 3 tiket serupa, tapi data dikirim compact
 // ---------------------------------------------------------------------------
 
 function buildTechnicianRecommendation(result, ticketType = "TICKETING") {
@@ -417,27 +548,46 @@ function buildTechnicianRecommendation(result, ticketType = "TICKETING") {
 
   const isIncident = ticketType === "INCIDENT";
 
+  // Top suggestion — detail penuh untuk highlight utama
+  const topSuggestion = result.topSuggestion
+    ? {
+        ...result.topSuggestion,
+        summary:   result.topSuggestion.summary   ? truncate(result.topSuggestion.summary,   500) : null,
+        rootCause: result.topSuggestion.rootCause ? truncate(result.topSuggestion.rootCause, 400) : null,
+        timeline:  result.topSuggestion.timeline  ? truncate(result.topSuggestion.timeline,  400) : null,
+      }
+    : null;
+
   return {
     found:     true,
     isIncident,
     label: isIncident
       ? "Insiden serupa pernah terjadi — gunakan sebagai referensi mitigasi"
       : "Kasus serupa pernah ditangani — gunakan sebagai referensi solusi",
-    similarTickets: (result.similarTickets || []).slice(0, 3).map((t) => ({
+    // topSuggestion: highlight utama — langsung tampil tanpa accordion
+    topSuggestion,
+    // similarTickets: compact — hanya info penting, detail via expand
+    similarTickets: (result.similarTickets || []).slice(0, 5).map((t) => ({
       ticketId:   t.ticketId,
-      title:      String(t.title || "").substring(0, 100),
-      summary:    t.summary   ? String(t.summary).substring(0, 500)   : null,
-      rootCause:  t.rootCause ? String(t.rootCause).substring(0, 400) : null,
-      timeline:   t.timeline  ? String(t.timeline).substring(0, 400)  : null,
+      title:      truncate(t.title, 100),
+      // Hanya 1 baris summary untuk preview
+      summaryPreview: t.summary ? truncate(t.summary, 120) : null,
+      // Data lengkap tetap ada untuk expand
+      summary:    t.summary   ? truncate(t.summary,    500) : null,
+      rootCause:  t.rootCause ? truncate(t.rootCause,  400) : null,
+      timeline:   t.timeline  ? truncate(t.timeline,   400) : null,
       resolvedAt: t.resolvedAt || null,
+      threadUrl:  t.threadUrl  || null,
     })),
-    runbooks: (result.runbooks || []).slice(0, 3).map((r) => ({
-      title:       String(r.title || ""),
-      category:    String(r.category || ""),
-      content:     String(r.content || "").substring(0, 600),
-      successRate: r.successRate || 0,
+    runbooks: (result.runbooks || []).slice(0, 2).map((r) => ({
+      title:          truncate(r.title, 80),
+      category:       r.category,
+      contentPreview: truncate(r.content, 100),
+      content:        truncate(r.content, 600),
+      successRate:    r.successRate || 0,
     })),
-    topSuggestion: result.topSuggestion || null,
+    totalSimilar: (result.similarTickets || []).length,
+    totalRunbooks: (result.runbooks || []).length,
   };
 }
 

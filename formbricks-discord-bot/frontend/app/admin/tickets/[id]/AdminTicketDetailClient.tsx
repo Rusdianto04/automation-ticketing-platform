@@ -13,14 +13,57 @@ import {
   adminUpdateTicketDataAction,
   adminUpdateFormFieldsAction,
 } from "../../actions";
-// ✅ FIX: Import TimelineSection untuk render timeline bergaya portal user
-import { TimelineSection } from "@/app/tickets/[id]/SharedComponents";
 
 interface Activity {
   id: number;
   type: string;
   description: string;
   created_at: string;
+}
+
+// ── Interface: item similarTickets (diperluas v11) ────────────────────────────
+interface SimilarTicketItem {
+  ticketId:       number;
+  title:          string;
+  summaryPreview: string | null;   // preview singkat untuk accordion header
+  summary:        string | null;
+  rootCause:      string | null;
+  timeline:       string | null;   // ✅ FIX: tambah timeline
+  resolvedAt:     string | null;
+  threadUrl:      string | null;   // ✅ FIX: tambah threadUrl
+}
+
+// ── Interface: runbook item (diperluas v11) ───────────────────────────────────
+interface RunbookItem {
+  title:          string;
+  category:       string;
+  contentPreview: string | null;   // preview singkat untuk accordion header
+  content:        string;
+  successRate:    number;
+}
+
+// ── Interface: topSuggestion (diperluas v11) ──────────────────────────────────
+interface TopSuggestion {
+  source:    string;
+  ticketId?: number;
+  title?:    string;
+  summary?:  string;
+  rootCause?: string;
+  timeline?:  string;   // ✅ FIX: tambah timeline
+  content?:  string;
+  threadUrl?: string;   // ✅ FIX: tambah threadUrl
+}
+
+// ── Interface: recommendation (diperluas v11) ─────────────────────────────────
+interface Recommendation {
+  found:          boolean;
+  isIncident:     boolean;
+  label:          string;
+  totalSimilar:   number;          // ✅ FIX: tambah totalSimilar
+  totalRunbooks:  number;          // ✅ FIX: tambah totalRunbooks
+  similarTickets: SimilarTicketItem[];
+  runbooks:       RunbookItem[];
+  topSuggestion:  TopSuggestion | null;
 }
 
 interface TicketDetail {
@@ -34,42 +77,13 @@ interface TicketDetail {
   assignee: string[];
   summary_ticket: string;
   root_cause: string;
-  // ✅ FIX: Kedua field timeline bertipe string (sudah dikonversi di page.tsx)
-  timeline_tindak_lanjut: string;
-  timeline_action_taken: string;
   discord: { threadUrl?: string; threadId?: string };
   report_url: string;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
   activities: Activity[];
-  recommendation?: {
-    found: boolean;
-    isIncident: boolean;
-    label: string;
-    similarTickets: {
-      ticketId: number;
-      title: string;
-      summary: string | null;
-      rootCause: string | null;
-      timeline: string | null;
-      resolvedAt: string | null;
-    }[];
-    runbooks: {
-      title: string;
-      category: string;
-      content: string;
-      successRate: number;
-    }[];
-    topSuggestion: {
-      source: string;
-      ticketId?: number;
-      title?: string;
-      summary?: string;
-      rootCause?: string;
-      content?: string;
-    } | null;
-  } | null;
+  recommendation?: Recommendation | null;
 }
 
 
@@ -124,7 +138,6 @@ function normalizeStatusForUI(rawStatus: string, isIncident: boolean): string {
   return rawStatus;
 }
 
-// Friendly label untuk log aktivitas — bersihkan teks "Peppermint Portal"
 function formatActivityDescription(description: string, type: string): string {
   if (!description) return type;
 
@@ -212,17 +225,18 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  const reportUrl     = ticket.report_url || "";
-  const attachmentUrl = (ticket.form_fields["Attachment"] as string) || "";
-  const isImageUrl    = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
+  const reportUrl      = ticket.report_url || "";
+  const attachmentUrl  = (ticket.form_fields["Attachment"] as string) || "";
+  const isImageUrl     = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
 
-  // Field formulir yang ditampilkan — exclude "Attachment" (sudah ada card sendiri)
   const displayFormFields = Object.entries(formEdits).filter(([k]) => k !== "Attachment");
 
-  // ✅ FIX: Timeline data diambil langsung dari field yang sudah di-pass dan di-serialize dari page.tsx
-  const timelineData = isIncident
-    ? (ticket.timeline_action_taken  || "")
-    : (ticket.timeline_tindak_lanjut || "");
+  const timelineKey  = isIncident ? "timeline_action_taken" : "timeline_tindak_lanjut";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const timelineData = (ticket as any)[timelineKey] || "";
+
+  // ── Recommendation data (typed) ───────────────────────────────────────────
+  const rec = ticket.recommendation;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -332,7 +346,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* Data Formulir (editable) — tanpa field Attachment */}
+            {/* Data Formulir (editable) */}
             {displayFormFields.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between">
@@ -390,7 +404,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             )}
 
-            {/* Attachment — card terpisah dengan hyperlink & preview gambar */}
+            {/* Attachment */}
             {attachmentUrl && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-700 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
@@ -434,7 +448,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             )}
 
-            {/* Summary AI — selalu tampil (kosong atau ada) */}
+            {/* Summary AI */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
                 📄 Ringkasan AI (Summary)
@@ -450,91 +464,193 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* ── Smart Recommendation (Teknisi) ── */}
-            {ticket.recommendation && ticket.recommendation.found && (
+            {/* ── Smart Recommendation (Teknisi) — Compact Accordion ── */}
+            {rec && rec.found && (
               <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
+
+                {/* Header */}
                 <div className="px-4 py-3 bg-emerald-700 text-white text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
                   💡 Smart Recommendation
+                  <span className="ml-2 text-[10px] font-normal bg-emerald-600 px-2 py-0.5 rounded-full">
+                    {rec.totalSimilar ?? rec.similarTickets.length} kasus serupa
+                  </span>
                   <span className="ml-auto text-[10px] font-normal opacity-80 normal-case">
-                    {ticket.recommendation.isIncident ? "Referensi Mitigasi Insiden" : "Referensi Solusi Teknisi"}
+                    {rec.isIncident ? "Referensi Mitigasi Insiden" : "Referensi Solusi Teknisi"}
                   </span>
                 </div>
-                <div className="p-4 space-y-4">
+
+                <div className="p-4 space-y-3">
+
+                  {/* Label */}
                   <p className="text-[12px] text-emerald-700 font-medium border-l-4 border-emerald-400 pl-3 bg-emerald-50 py-2 rounded-r">
-                    {ticket.recommendation.label}
+                    {rec.label}
                   </p>
 
-                  {/* Similar Tickets */}
-                  {ticket.recommendation.similarTickets.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
-                        📋 {ticket.recommendation.isIncident ? "Insiden Serupa" : "Kasus Serupa"} ({ticket.recommendation.similarTickets.length})
-                      </p>
-                      <div className="space-y-3">
-                        {ticket.recommendation.similarTickets.map((t) => (
-                          <div key={t.ticketId} className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-[12px]">
-                            <p className="font-semibold text-slate-700">
-                              #{t.ticketId} — {t.title}
-                              {t.resolvedAt && (
-                                <span className="ml-2 text-[10px] text-slate-400 font-normal">
-                                  Resolved: {new Date(t.resolvedAt).toLocaleDateString("id-ID")}
-                                </span>
-                              )}
+                  {/* ── Top Suggestion: Highlight Utama ── */}
+                  {rec.topSuggestion && (
+                    <div className="rounded-lg border border-emerald-300 overflow-hidden">
+                      <div className="px-3 py-2 bg-emerald-600 text-white text-[11px] font-bold uppercase tracking-wide flex items-center gap-2">
+                        🏆 Referensi Terbaik
+                        {rec.topSuggestion.source === "ticket" && rec.topSuggestion.ticketId && (
+                          <span className="ml-auto font-normal text-emerald-200">
+                            #{rec.topSuggestion.ticketId}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-3 space-y-2 bg-emerald-50 text-[12px]">
+                        <p className="font-semibold text-slate-700 truncate">
+                          {rec.topSuggestion.title}
+                        </p>
+                        {rec.topSuggestion.summary && (
+                          <div className="border-l-2 border-emerald-400 pl-2">
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">✅ Solusi</p>
+                            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                              {rec.topSuggestion.summary}
                             </p>
-                            {t.summary && (
-                              <div className="mt-2 border-l-2 border-emerald-400 pl-2">
-                                <p className="text-[10px] text-slate-400 font-semibold uppercase">✅ Solusi</p>
-                                <p className="text-slate-600 whitespace-pre-wrap">{t.summary}</p>
-                              </div>
-                            )}
-                            {t.rootCause && (
-                              <div className="mt-1 border-l-2 border-amber-400 pl-2">
-                                <p className="text-[10px] text-slate-400 font-semibold uppercase">🔍 Root Cause</p>
-                                <p className="text-slate-600 whitespace-pre-wrap">{t.rootCause}</p>
-                              </div>
-                            )}
-                            {t.timeline && (
-                              <div className="mt-1 border-l-2 border-blue-400 pl-2">
-                                <p className="text-[10px] text-slate-400 font-semibold uppercase">📅 Action Steps</p>
-                                <p className="text-slate-600 whitespace-pre-wrap">{t.timeline}</p>
-                              </div>
-                            )}
                           </div>
-                        ))}
+                        )}
+                        {rec.topSuggestion.rootCause && (
+                          <div className="border-l-2 border-amber-400 pl-2">
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">🔍 Root Cause</p>
+                            <p className="text-slate-600">{rec.topSuggestion.rootCause}</p>
+                          </div>
+                        )}
+                        {rec.topSuggestion.timeline && (
+                          <div className="border-l-2 border-blue-400 pl-2">
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">📅 Action Steps</p>
+                            <p className="text-slate-600 whitespace-pre-wrap">{rec.topSuggestion.timeline}</p>
+                          </div>
+                        )}
+                        {rec.topSuggestion.threadUrl && (
+                          <a
+                            href={rec.topSuggestion.threadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline mt-1"
+                          >
+                            🔗 Lihat thread Discord referensi
+                          </a>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {/* Runbooks */}
-                  {ticket.recommendation.runbooks.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
-                        📚 Knowledge Base / Runbook
-                      </p>
-                      <div className="space-y-2">
-                        {ticket.recommendation.runbooks.map((r, i) => (
-                          <div key={i} className="bg-blue-50 rounded-lg p-3 border border-blue-200 text-[12px]">
-                            <p className="font-semibold text-blue-700">
-                              [{r.category}] {r.title}
-                              {r.successRate > 0 && (
-                                <span className="ml-2 text-[10px] text-blue-500">
-                                  ✅ {r.successRate}% success rate
-                                </span>
+                  {/* ── Kasus Serupa Lainnya — Accordion ── */}
+                  {rec.similarTickets.length > 0 && (
+                    <details className="group">
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition text-[12px] font-semibold text-slate-600 select-none">
+                          <span>📋 Kasus Serupa Lainnya ({rec.similarTickets.length})</span>
+                          <span className="ml-auto text-[10px] text-slate-400 group-open:hidden">▼ Tampilkan</span>
+                          <span className="ml-auto text-[10px] text-slate-400 hidden group-open:block">▲ Sembunyikan</span>
+                        </div>
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        {rec.similarTickets.map((t) => (
+                          <details key={t.ticketId} className="group/item rounded-lg border border-slate-200 overflow-hidden">
+                            <summary className="cursor-pointer list-none">
+                              <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition select-none">
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[12px] font-semibold text-slate-700">
+                                    #{t.ticketId} —{" "}
+                                  </span>
+                                  <span className="text-[12px] text-slate-600 truncate">
+                                    {t.title}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {t.resolvedAt && (
+                                    <span className="text-[10px] text-slate-400">
+                                      {new Date(t.resolvedAt).toLocaleDateString("id-ID")}
+                                    </span>
+                                  )}
+                                  {t.summaryPreview && (
+                                    <span className="hidden sm:block text-[10px] text-slate-400 italic max-w-[200px] truncate">
+                                      {t.summaryPreview}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-slate-400 group-open/item:hidden">▼</span>
+                                  <span className="text-[10px] text-slate-400 hidden group-open/item:block">▲</span>
+                                </div>
+                              </div>
+                            </summary>
+                            <div className="px-3 pb-3 pt-2 bg-white space-y-2 text-[12px]">
+                              {t.summary && (
+                                <div className="border-l-2 border-emerald-400 pl-2">
+                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">✅ Solusi</p>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{t.summary}</p>
+                                </div>
                               )}
-                            </p>
-                            {r.content && (
-                              <p className="mt-1 text-slate-600 whitespace-pre-wrap">{r.content}</p>
-                            )}
-                          </div>
+                              {t.rootCause && (
+                                <div className="border-l-2 border-amber-400 pl-2">
+                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">🔍 Root Cause</p>
+                                  <p className="text-slate-600">{t.rootCause}</p>
+                                </div>
+                              )}
+                              {t.timeline && (
+                                <div className="border-l-2 border-blue-400 pl-2">
+                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">📅 Action Steps</p>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{t.timeline}</p>
+                                </div>
+                              )}
+                              {t.threadUrl && (
+                                <a
+                                  href={t.threadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline"
+                                >
+                                  🔗 Lihat thread Discord
+                                </a>
+                              )}
+                            </div>
+                          </details>
                         ))}
                       </div>
-                    </div>
+                    </details>
                   )}
+
+                  {/* ── Runbooks — Accordion ── */}
+                  {rec.runbooks.length > 0 && (
+                    <details className="group">
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition text-[12px] font-semibold text-blue-700 select-none">
+                          <span>📚 Knowledge Base ({rec.runbooks.length})</span>
+                          <span className="ml-auto text-[10px] text-blue-400 group-open:hidden">▼ Tampilkan</span>
+                          <span className="ml-auto text-[10px] text-blue-400 hidden group-open:block">▲ Sembunyikan</span>
+                        </div>
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        {rec.runbooks.map((r, i) => (
+                          <details key={i} className="group/rb rounded-lg border border-blue-200 overflow-hidden">
+                            <summary className="cursor-pointer list-none">
+                              <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 transition select-none">
+                                <span className="text-[12px] font-semibold text-blue-700 flex-1 truncate">
+                                  [{r.category}] {r.title}
+                                </span>
+                                {r.successRate > 0 && (
+                                  <span className="text-[10px] text-blue-500 flex-shrink-0">
+                                    ✅ {r.successRate}%
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-blue-400 group-open/rb:hidden flex-shrink-0">▼</span>
+                                <span className="text-[10px] text-blue-400 hidden group-open/rb:block flex-shrink-0">▲</span>
+                              </div>
+                            </summary>
+                            <div className="px-3 pb-3 pt-2 bg-white text-[12px]">
+                              <p className="text-slate-600 whitespace-pre-wrap">{r.content}</p>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+
                 </div>
               </div>
             )}
 
-            {/* Root Cause — selalu tampil */}
+            {/* Root Cause */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-amber-800 text-amber-100 text-[12px] font-bold uppercase tracking-wider">
                 🔍 Root Cause Analysis
@@ -550,15 +666,23 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* ✅ FIX: Timeline Progress — menggunakan TimelineSection sama seperti portal user */}
+            {/* Timeline Progress */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
                 ⏱️ {isIncident ? "Action Taken / Timeline" : "Timeline Progress / Tindak Lanjut"}
               </div>
-              <TimelineSection items={timelineData || null} />
+              {timelineData ? (
+                <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {timelineData}
+                </div>
+              ) : (
+                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
+                  Belum ada progress yang dicatat.
+                </div>
+              )}
             </div>
 
-            {/* Activity Log — dengan label yang bersih */}
+            {/* Activity Log */}
             {ticket.activities.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
@@ -654,7 +778,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </div>
             </div>
 
-            {/* Laporan Incident — hanya untuk INCIDENT */}
+            {/* Laporan Incident */}
             {isIncident && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-rose-800 text-rose-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">

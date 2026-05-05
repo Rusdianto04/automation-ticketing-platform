@@ -223,9 +223,7 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
   const isSearchMode = searchId !== "";
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#d9e1f2" }}>
-
-
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#e8eaed" }}>
 
       {/* ═══════════════════════════════════════════════════════
           HEADER — Diperbesar: h-20 (80px), logo lebih besar
@@ -445,7 +443,6 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
               Setiap incident ditampilkan sebagai card TERPISAH
               (bukan tabel, bukan divisi, tapi card-card sendiri)
           ═══════════════════════════════════════════════════ */}
-          {/* Tidak ada judul section — langsung list card incident */}
 
           <div className="divide-y divide-slate-100">
             {filteredIncidents.length === 0 ? (
@@ -464,13 +461,9 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
               </div>
             ) : (
               /* List card incident — setiap incident = 1 card terpisah */
-              <div className="space-y-3">
+              <div className="p-3 space-y-2">
                 {filteredIncidents.map((inc) => (
-                  <IncidentCard
-                    key={inc.id}
-                    inc={inc}
-                    onDetail={() => setSelectedIncident(inc)}
-                  />
+                  <IncidentCard key={inc.id} inc={inc} />
                 ))}
               </div>
             )}
@@ -480,22 +473,21 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
       </main>
 
       {/* ── Footer ── */}
-      <footer className="w-full bg-[#0f172a] text-white border-t border-white/10 mt-12">
-        <div className="w-full px-4 py-2 text-center space-y-1">
-          <p className="text-[12px] text-white/70">
+
+      <footer className="w-full py-8">
+        <div className="flex flex-col items-center justify-center gap-3">
+
+          {/* GARIS GRADIENT + FADE */}
+          <div className="w-40 h-[2px] bg-gradient-to-r from-transparent via-slate-500/60 to-transparent animate-fadeIn"></div>
+
+          {/* TEXT */}
+          <p className="text-[12px] text-slate-500/80 tracking-wider">
             Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
           </p>
+
         </div>
       </footer>
-
       {modal === "support" && <SupportFormModal onClose={() => setModal(null)} />}
-      {/* {modal === "incident" && <IncidentFormModal onClose={() => setModal(null)} />} */}
-      {selectedIncident && (
-        <IncidentDetailModal
-          incident={selectedIncident}
-          onClose={() => setSelectedIncident(null)}
-        />
-      )}
     </div>
   );
 }
@@ -503,12 +495,12 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Incident Card — tampilan card terpisah per incident ──────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => void }) {
+function IncidentCard({ inc }: { inc: IncidentRow }) {
   return (
-    <div
-      onClick={onDetail}
-      className="block bg-dark overflow-hidden transition-all duration-150 hover:shadow-md hover:-translate-y-px active:scale-[0.99] cursor-pointer"
-      style={{ border: "1px solid #e2e8f0", borderRadius: "10px" }}
+    <Link
+      href={`/tickets/${inc.id}`}
+      className="block bg-white transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+      style={{ borderRadius: "10px", border: "1px solid #e2e8f0" }}
     >
       {/* Flex row: konten kiri (flex-1) + panel kanan (tanggal + ⋮) */}
       <div className="flex items-stretch px-5 py-3 gap-4">
@@ -517,7 +509,7 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
         <div className="flex-1 min-w-0 flex flex-col gap-2">
 
           {/* Baris 1: Judul */}
-          <p className="font-bold text-slate-800 text-[13px] leading-tight truncate">
+          <p className="font-bold text-slate-800 text-[18px] leading-tight truncate">
             {inc.title}
           </p>
 
@@ -591,24 +583,17 @@ function IncidentCard({ inc, onDetail }: { inc: IncidentRow; onDetail: () => voi
         </div>
 
         {/* ── Panel Kanan: Tanggal + ⋮ — rata tengah vertikal penuh ── */}
-        <div className="flex flex-col items-end justify-center gap-1.5 shrink-0 border-l border-slate-100 pl-4">
+        <div className="flex flex-col items-end justify-center shrink-0 border-l border-slate-100 pl-4">
           <span className="text-[10px] text-slate-400 whitespace-nowrap">{inc.created_at}</span>
           <div
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDetail();
-            }}
             className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
             title="Lihat ringkasan"
           >
-            <MoreVertical size={14} />
           </div>
         </div>
 
       </div>
-    </div>
-  );
+    </Link>);
 }
 // ─── Ticket Search Result ─────────────────────────────────────────────────────
 
@@ -741,76 +726,6 @@ function InfoItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Incident Detail Modal (popup ringkasan via tombol ⋮) ─────────────────────
-
-function IncidentDetailModal({ incident, onClose }: { incident: IncidentRow; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between rounded-t-2xl">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={18} className="text-rose-600" />
-            <h3 className="text-[15px] font-bold text-slate-800">Detail Incident #{incident.id}</h3>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
-            <X size={18} className="text-slate-500" />
-          </button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Judul Incident</p>
-            <p className="text-[15px] font-bold text-slate-800">{incident.title}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Priority</p>
-              <span className={`inline-flex px-2.5 py-1 rounded-full text-[12px] font-semibold ${PRIORITY_COLORS[incident.priority] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
-                {incident.priority}
-              </span>
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Severity</p>
-              <p className="text-[13px] font-semibold text-slate-700">{incident.severity}</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Status</p>
-
-              <span
-                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                style={normalizeStatusForDisplay(incident.status, incident.type).style}
-              >
-                {normalizeStatusForDisplay(incident.status, incident.type).label}
-              </span>
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Tanggal</p>
-              <p className="text-[13px] text-slate-700">{incident.created_at}</p>
-            </div>
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Suspect Area</p>
-            <p className="text-[13px] text-slate-700">{incident.suspect_area}</p>
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-1">Indicated Issue</p>
-            <p className="text-[13px] text-slate-700">{incident.indicated_issue}</p>
-          </div>
-          <div className="pt-2">
-            <Link
-              href={`/tickets/${incident.id}`}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors"
-              style={{ background: "#374151" }}
-              onMouseOver={(e) => (e.currentTarget.style.background = "#4b5563")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "#374151")}
-            >
-              Lihat Detail Lengkap <ChevronRight size={14} />
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Support Form Modal — Multi-Slide dengan Auto-fill Email ─────────────────
 
@@ -1189,8 +1104,11 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </div>
+
       )}
+
     </ModalWrapper>
+
   );
 }
 
