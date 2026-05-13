@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.log
+public/reports/*.pdf
+public/reports/*.html
+logs/

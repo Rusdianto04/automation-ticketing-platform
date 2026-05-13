@@ -1,0 +1,70 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Linux VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          port:     ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+
+            PROJECT_DIR="${{ secrets.VPS_PROJECT_DIR || '/opt/support-incident-system' }}"
+
+            echo "============================================================"
+            echo "Deploying support-incident-system to $PROJECT_DIR"
+            echo "============================================================"
+
+            # Go to project directory
+            cd "$PROJECT_DIR"
+
+            # Pull latest code
+            git pull origin main
+
+            # Pull updated images (if using registry)
+            # docker compose -f docker-compose.prod.yml pull
+
+            # Build & restart services
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+
+            # Remove dangling images
+            docker image prune -f
+
+            # Show running containers
+            docker compose -f docker-compose.prod.yml ps
+
+            echo "Deploy complete!"
+
+      - name: Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          port:     ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            echo "Waiting for services to be healthy..."
+            sleep 30
+
+            # Check backend health
+            curl -sf http://localhost:3000/health && echo "[OK] Backend healthy" || echo "[WARN] Backend health check failed"
+
+            # Check frontend health
+            curl -sf http://localhost:3001/api/health && echo "[OK] Frontend healthy" || echo "[WARN] Frontend health check failed"
+
+            echo "Health checks done."

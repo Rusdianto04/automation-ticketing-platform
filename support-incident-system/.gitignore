@@ -1,0 +1,50 @@
+# ── Dependencies ───────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+apps/frontend/.next/
+apps/frontend/out/
+apps/backend/dist/
+
+# ── Runtime logs (keep dir, not content) ──────────────────────────────────────
+logs/**/*.log
+logs/**/*.out
+!logs/**/.gitkeep
+
+# ── Uploads (keep dir structure, not actual files) ────────────────────────────
+uploads/tickets/*
+!uploads/tickets/.gitkeep
+
+# ── Generated reports ─────────────────────────────────────────────────────────
+apps/backend/public/reports/*.html
+apps/backend/public/reports/*.pdf
+!apps/backend/public/reports/.gitkeep
+
+# ── OS & IDE ──────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+.vscode/settings.json
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+*.pid
+.docker-sync/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.tgz
+*.tar.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
