@@ -1,0 +1,89 @@
+
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant FE as Frontend<br/>Next.js Portal
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Bot Service
+    participant Notif as Notifikasi<br/>Email dan N8N
+
+    User ->> FE: Buka /dashboard
+    activate FE
+    FE -->> User: Tampil halaman + tombol Buat Tiket
+    deactivate FE
+
+    User ->> FE: Klik Buat Tiket Support
+    activate FE
+    FE -->> User: Form Step 1 - Data Email
+    deactivate FE
+
+    User ->> FE: Step 1 - Email
+    activate FE
+    FE ->> FE: Validasi field Step 1
+    FE -->> User: Lanjut ke Step 2 - Data Diri
+    deactivate FE
+
+    User ->> FE: Step 2 - Nama,<br/>No Telp, Divisi
+    activate FE
+    FE ->> FE: Validasi field Step 2
+    FE -->> User: Lanjut ke Step 3 - Detail Masalah
+    deactivate FE
+
+    User ->> FE: Step 3 - Jenis Support, Masalah,<br/>ID Device, Ruangan, Tanggal
+    activate FE
+    FE -->> User: Preview + tombol Submit
+    deactivate FE
+
+    User ->> FE: Klik Submit
+    activate FE
+    FE ->> BE: POST /api/tickets/create
+    activate BE
+
+    BE ->> BE: validate DTO via Webhook Service
+
+    alt Validasi gagal
+        BE -->> FE: 400 Bad Request
+        FE -->> User: Tampil pesan error validasi
+    else Validasi OK
+        BE ->> DB: submission.create (rawPayload)
+        activate DB
+        DB -->> BE: submission saved
+        deactivate DB
+
+        BE ->> BE: Ticket Service - createTicket (SUPPORT)
+        BE ->> BE: Classifier - analisis kata kunci
+        Note over BE: Hasil: category, priority, keywords
+
+        BE ->> DB: ticket.create (ticketData)
+        activate DB
+        DB -->> BE: ticket id dan ticketNumber
+        deactivate DB
+
+        BE ->> DB: activity.create (TICKET_CREATED)
+
+        par Notifikasi Paralel
+            BE ->> Discord: postTicketToChannel (ticket)
+            activate Discord
+            Discord ->> Discord: Buat thread + format embed
+            Discord -->> BE: threadId, messageId
+            deactivate Discord
+            BE ->> DB: Update discord JSON ke ticket
+        and
+            BE ->> Notif: sendConfirmation (user.email)
+            activate Notif
+            Notif -->> BE: Email terkirim
+            deactivate Notif
+            BE ->> DB: activity.create (EMAIL_SENT)
+        and
+            BE ->> Notif: triggerWorkflow (ticket.created)
+            activate Notif
+            Notif -->> BE: N8N workflow triggered
+            deactivate Notif
+        end
+
+        BE -->> FE: 201 Created - ticketId, ticketNumber
+        deactivate BE
+        FE -->> User: Halaman sukses + nomor tiket
+        deactivate FE
+    end

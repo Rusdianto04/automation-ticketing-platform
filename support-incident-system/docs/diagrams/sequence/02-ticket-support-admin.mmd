@@ -1,0 +1,53 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Portal<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Bot Service
+    participant Notif as Notifikasi<br/>Email dan N8N
+
+    Admin ->> FE: Buka /admin/tickets<br/>Klik Input Tiket Support
+    activate FE
+    FE -->> Admin: Tampil Form Input Tiket Support
+    deactivate FE
+
+    Admin ->> FE: Isi form - Nama, Email, Divisi,<br/>Jenis Support, Deskripsi
+    activate FE
+    FE ->> FE: Validasi semua field
+    Admin ->> FE: Klik Submit
+    FE ->> BE: POST /api/tickets/create (type=SUPPORT)
+    deactivate FE
+    activate BE
+
+    BE ->> BE: Ticket Service - createTicket
+    BE ->> BE: Classifier - classifyTicketFields
+    Note over BE: Hasil: category, priority, keywords
+
+    BE ->> DB: ticket.create (form_id=admin_portal)
+    activate DB
+    DB -->> BE: ticket id dan ticketNumber
+    deactivate DB
+
+    BE ->> DB: activity.create (TICKET_CREATED, admin_manual)
+
+    par Notifikasi Paralel
+        BE ->> Discord: postNewTicketEmbed (ticket)
+        activate Discord
+        Discord -->> BE: threadId
+        deactivate Discord
+    and
+        BE ->> Notif: sendConfirmation (pemohon.email)
+        activate Notif
+        Notif -->> BE: Email terkirim
+        deactivate Notif
+    and
+        BE ->> Notif: triggerWorkflow (ticket.created)
+        activate Notif
+        Notif -->> BE: N8N triggered
+        deactivate Notif
+    end
+
+    BE -->> FE: 201 Created - ticketId, ticketNumber
+    deactivate BE
+    FE -->> Admin: Redirect /admin/tickets/id + sukses

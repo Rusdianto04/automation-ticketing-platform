@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Portal<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+
+    Admin ->> FE: Buka /admin/reports<br/>Tab Export Data
+    activate FE
+    FE -->> Admin: Tampil tombol Export Support CSV<br/>dan Export Incident CSV
+    deactivate FE
+
+    alt Export Tiket Support
+        Admin ->> FE: Klik Export Support CSV
+        activate FE
+        FE ->> BE: GET /api/admin/export/support
+        activate BE
+        BE ->> DB: ticket.findMany (type=SUPPORT,<br/>include activities)
+        activate DB
+        DB -->> BE: allSupportTickets array
+        deactivate DB
+        BE ->> BE: mapToCSVFormat (tickets)
+        BE ->> BE: generateCSV (rows, headers)
+        BE -->> FE: CSV string + Content-Type text/csv
+        deactivate BE
+        FE -->> Admin: Browser download<br/>support-tickets.csv
+        deactivate FE
+
+    else Export Tiket Incident
+        Admin ->> FE: Klik Export Incident CSV
+        activate FE
+        FE ->> BE: GET /api/admin/export/incident
+        activate BE
+        BE ->> DB: ticket.findMany (type=INCIDENT,<br/>include activities)
+        activate DB
+        DB -->> BE: allIncidentTickets array
+        deactivate DB
+        BE ->> BE: mapToCSVFormat (tickets)
+        BE ->> BE: generateCSV (rows, headers)
+        BE -->> FE: CSV string + Content-Type text/csv
+        deactivate BE
+        FE -->> Admin: Browser download<br/>incident-tickets.csv
+        deactivate FE
+    end

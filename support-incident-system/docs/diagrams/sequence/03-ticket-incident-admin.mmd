@@ -1,0 +1,52 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Portal<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Bot Service
+    participant N8N as N8N<br/>Incident Handler
+
+    Admin ->> FE: Buka /admin/tickets<br/>Klik Input Tiket Incident
+    activate FE
+    FE -->> Admin: Tampil Form Input Tiket Incident
+    deactivate FE
+
+    Admin ->> FE: Isi form - Judul, Deskripsi,<br/>Prioritas, Severity, Suspect Area, Pelapor
+    activate FE
+    FE ->> FE: Validasi semua field required
+    Admin ->> FE: Klik Submit Incident
+    FE ->> BE: POST /api/tickets/create (type=INCIDENT)
+    deactivate FE
+    activate BE
+
+    BE ->> BE: Ticket Service - createTicket (INCIDENT)
+    BE ->> BE: Classifier - deteksi severity dan area
+    Note over BE: Hasil: category, priority,<br/>suspect_area, keywords
+
+    BE ->> DB: ticket.create (type=INCIDENT, status=OPEN)
+    activate DB
+    DB -->> BE: ticket id dan ticketNumber
+    deactivate DB
+
+    BE ->> DB: activity.create (TICKET_CREATED)
+    BE ->> DB: activity.create (incident_detected)
+
+    par Notifikasi Incident
+        BE ->> Discord: postIncidentEmbed (ticket, priority=HIGH)
+        activate Discord
+        Discord ->> Discord: Buat thread label INCIDENT
+        Discord -->> BE: threadId, messageId
+        deactivate Discord
+    and
+        BE ->> N8N: triggerWorkflow (incident.created)
+        activate N8N
+        N8N ->> N8N: Workflow 3 - Incident Handler
+        Note over N8N: AI analisis root cause<br/>dan langkah mitigasi
+        N8N -->> BE: classification result
+        deactivate N8N
+    end
+
+    BE -->> FE: 201 Created - ticketId, type=INCIDENT
+    deactivate BE
+    FE -->> Admin: Redirect ke detail incident

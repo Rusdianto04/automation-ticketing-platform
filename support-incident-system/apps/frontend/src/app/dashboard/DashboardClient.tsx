@@ -321,7 +321,7 @@ export default function DashboardClient({ incidents, allTickets, orgName, orgDep
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari judul..."
+                    placeholder="Cari Ticket..."
                     className="pl-8 pr-7 py-1.5 rounded-lg text-[12px] bg-white text-slate-700 focus:outline-none w-44"
                     style={{ border: "1px solid #d1d5db" }}
                   />

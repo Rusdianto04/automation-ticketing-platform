@@ -1,0 +1,91 @@
+sequenceDiagram
+    autonumber
+    actor Staff as Staff Discord
+    participant DC as Discord
+    participant CMD as Command<br/>Handler
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Service
+
+    Note over Staff, Discord: Command !status - Update Status Tiket
+
+    Staff ->> DC: !status #12 investigasi<br/>Ada anomali jaringan
+    activate DC
+    DC ->> CMD: messageCreate event
+    deactivate DC
+    activate CMD
+    CMD ->> CMD: Parse - ticketId=12,<br/>action=investigasi, note=...
+
+    CMD ->> DB: ticket.findById (12)
+    activate DB
+    DB -->> CMD: ticket (type=INCIDENT, status=OPEN)
+    deactivate DB
+
+    alt Tiket tidak ditemukan
+        CMD -->> DC: reply - Ticket tidak ditemukan
+    else Type INCIDENT - action valid
+        CMD ->> DB: ticket.update (INVESTIGASI, note)
+        activate DB
+        DB -->> CMD: updated ticket
+        deactivate DB
+        CMD ->> DB: activity.create (STATUS_UPDATED)
+        CMD ->> Discord: updateThreadTitle (ticket)
+        activate Discord
+        Discord -->> CMD: updated
+        deactivate Discord
+        CMD ->> Discord: updateTicketMessage (ticket)
+        activate Discord
+        Discord -->> CMD: updated
+        deactivate Discord
+        CMD ->> BE: triggerWorkflow (status.changed)
+        activate BE
+        BE -->> CMD: triggered
+        deactivate BE
+        CMD -->> DC: reply sukses - Status INVESTIGASI
+        activate DC
+        DC -->> Staff: Konfirmasi status terupdate
+        deactivate DC
+    end
+    deactivate CMD
+
+    Note over Staff, Discord: Command !assign - Assign Petugas
+
+    Staff ->> DC: !assign #12 Budi, Siti, Tim Jaringan
+    activate DC
+    DC ->> CMD: messageCreate event
+    deactivate DC
+    activate CMD
+    CMD ->> CMD: Parse assignees list
+    CMD ->> DB: ticket.update (assignee list)
+    activate DB
+    DB -->> CMD: updated
+    deactivate DB
+    CMD ->> DB: activity.create (ASSIGNED)
+    CMD ->> Discord: updateTicketMessage (ticket)
+    activate Discord
+    Discord -->> CMD: updated
+    deactivate Discord
+    CMD -->> DC: reply konfirmasi assignee
+    activate DC
+    DC -->> Staff: Petugas berhasil di-assign
+    deactivate DC
+    deactivate CMD
+
+    Note over Staff, Discord: Command !evidence - Upload Attachment
+
+    Staff ->> DC: !evidence + attach file screenshot
+    activate DC
+    DC ->> CMD: messageCreate + attachment
+    deactivate DC
+    activate CMD
+    CMD ->> CMD: Ambil attachment URL
+    CMD ->> DB: ticket.update (evidence_attachment append)
+    activate DB
+    DB -->> CMD: updated
+    deactivate DB
+    CMD ->> DB: activity.create (evidence)
+    CMD -->> DC: reply - Evidence tersimpan
+    activate DC
+    DC -->> Staff: Evidence berhasil dilampirkan
+    deactivate DC
+    deactivate CMD

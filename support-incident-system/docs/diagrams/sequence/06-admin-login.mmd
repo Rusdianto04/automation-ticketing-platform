@@ -1,0 +1,61 @@
+
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Login<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant AUTH as Auth<br/>Middleware
+    participant DB as Database<br/>PostgreSQL
+
+    Admin ->> FE: Buka /admin/login
+    activate FE
+    FE -->> Admin: Tampil form Username + Password
+    deactivate FE
+
+    Admin ->> FE: Input username dan password
+    Admin ->> FE: Klik Login
+    activate FE
+    FE ->> BE: POST /api/admin/login
+    activate BE
+    BE ->> AUTH: validateCredentials (username, password)
+    activate AUTH
+    AUTH ->> AUTH: bcrypt.compare (password, hash)
+
+    alt Kredensial salah
+        AUTH -->> BE: invalid credentials
+        BE -->> FE: 401 Unauthorized
+        FE -->> Admin: Error - username atau password salah
+    else Kredensial benar
+        AUTH ->> AUTH: jwt.sign (role=admin, JWT_SECRET)
+        AUTH -->> BE: token, expiresIn
+        BE -->> FE: 200 OK - token
+        FE ->> FE: Simpan token di session/cookie
+        FE -->> Admin: Redirect ke /admin dashboard
+    end
+
+    deactivate AUTH
+    deactivate BE
+    deactivate FE
+
+    Note over Admin, DB: Setiap request admin berikutnya
+
+    Admin ->> FE: Akses halaman admin
+    activate FE
+    FE ->> BE: Request + Authorization Bearer token
+    activate BE
+    BE ->> AUTH: verifyToken (token)
+    activate AUTH
+
+    alt Token expired atau invalid
+        AUTH -->> BE: 403 Forbidden
+        BE -->> FE: 403
+        FE -->> Admin: Redirect ke /admin/login
+    else Token valid
+        AUTH -->> BE: decoded payload OK
+        BE -->> FE: Data response
+        FE -->> Admin: Tampil konten halaman
+    end
+
+    deactivate AUTH
+    deactivate BE
+    deactivate FE

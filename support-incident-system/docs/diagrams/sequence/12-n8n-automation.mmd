@@ -1,0 +1,102 @@
+sequenceDiagram
+    autonumber
+    participant BE as Backend<br/>Express API
+    participant N8N as N8N<br/>Workflow Engine
+    participant Groq as Groq AI<br/>LLM Service
+    participant DB as Database<br/>PostgreSQL
+    participant DC as Discord<br/>Bot Service
+
+    Note over BE, DC: Workflow 1 - Ticket Intelligence (AI Classify + Summary)
+
+    BE ->> N8N: POST /webhook/discord-activity<br/>(event=ticket.created, ticketId)
+    activate N8N
+    N8N ->> BE: GET /api/ticket/:id
+    activate BE
+    BE ->> DB: ticket.findUnique (id)
+    activate DB
+    DB -->> BE: ticketData
+    deactivate DB
+    BE -->> N8N: ticketData
+    deactivate BE
+
+    N8N ->> Groq: Prompt - classify type,<br/>priority, category
+    activate Groq
+    Groq -->> N8N: type, priority, category, suspect_area
+    deactivate Groq
+
+    N8N ->> Groq: Prompt - generate summary tiket
+    activate Groq
+    Groq -->> N8N: summary text
+    deactivate Groq
+
+    N8N ->> Groq: Prompt - smart recommendation
+    activate Groq
+    Groq -->> N8N: recommendation array
+    deactivate Groq
+
+    N8N ->> BE: POST /api/ticket/summary<br/>(ticketId, summary, recommendations)
+    activate BE
+    BE ->> DB: ticket.update (summary, keywords)
+    activate DB
+    DB -->> BE: updated
+    deactivate DB
+    BE -->> N8N: success
+    deactivate BE
+
+    N8N ->> DC: Update thread dengan summary AI
+    activate DC
+    DC -->> N8N: message sent
+    deactivate DC
+    deactivate N8N
+
+    Note over BE, DC: Workflow 2 - Chatbot Assistant
+
+    BE ->> N8N: POST /webhook/chatbot-qa<br/>(question, userId, context)
+    activate N8N
+    N8N ->> BE: GET /api/knowledge
+    activate BE
+    BE ->> DB: knowledgeBase.findMany()
+    activate DB
+    DB -->> BE: entries array
+    deactivate DB
+    BE -->> N8N: context data
+    deactivate BE
+    N8N ->> Groq: Prompt - jawab dengan context KB
+    activate Groq
+    Groq -->> N8N: answer text
+    deactivate Groq
+    N8N ->> BE: POST /api/chatbot/log
+    activate BE
+    BE ->> DB: chatbotInteraction.create (log)
+    deactivate BE
+    N8N ->> DC: Kirim jawaban ke Discord thread
+    activate DC
+    DC -->> N8N: sent
+    deactivate DC
+    deactivate N8N
+
+    Note over BE, DC: Workflow 3 - Incident Handler + Smart Intake
+
+    BE ->> N8N: POST /webhook/incident-event<br/>(event=incident.created, ticketId)
+    activate N8N
+    N8N ->> BE: GET /api/ticket/:id
+    activate BE
+    BE -->> N8N: incidentData
+    deactivate BE
+    N8N ->> Groq: Prompt - analisis root cause,<br/>mitigasi, dan dampak incident
+    activate Groq
+    Groq -->> N8N: root_cause, mitigation_steps, impact
+    deactivate Groq
+    N8N ->> BE: POST /api/ticket/timeline/append
+    activate BE
+    BE ->> DB: ticket.update (root_cause, timeline)
+    activate DB
+    DB -->> BE: updated
+    deactivate DB
+    BE -->> N8N: success
+    deactivate BE
+    N8N ->> DC: Post analisis ke thread Discord
+    activate DC
+    DC -->> N8N: posted
+    deactivate DC
+    deactivate N8N

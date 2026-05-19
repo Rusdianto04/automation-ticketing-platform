@@ -21,6 +21,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-formbricks_pass}
     volumes:
       - sis_postgres_data:/var/lib/postgresql/data
+      - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sis-network
     healthcheck:
@@ -154,7 +155,7 @@ services:
       DB_TYPE:                           postgresdb
       DB_POSTGRESDB_HOST:                postgres
       DB_POSTGRESDB_PORT:                5432
-      DB_POSTGRESDB_DATABASE:            ${DB_NAME:-formbricks_tickets}
+      DB_POSTGRESDB_DATABASE:            n8n_db 
       DB_POSTGRESDB_USER:                ${DB_USER:-formbricks_user}
       DB_POSTGRESDB_PASSWORD:            ${DB_PASSWORD:-formbricks_pass}
       BOT_API_URL:                       http://backend:3000

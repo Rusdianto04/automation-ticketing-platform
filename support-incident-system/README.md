@@ -130,10 +130,9 @@ Setiap tiket yang masuk (dari Formbricks maupun Static Form) akan otomatis:
 ### Input Tiket
 - **Formbricks Form** — form online yang bisa dibagikan via link (Support & Incident)
 - **Static Web Form** — form 3-langkah langsung di portal (multi-step, auto-fill email)
-- **Dual-mode parsing** — Formbricks v2 (field ID → label mapping) & static form (label langsung)
 
 ### Manajemen Tiket
-- **Portal User** — cek status tiket via ID, lihat detail, timeline, summary AI
+- **Portal User** — cek status tiket via ID, lihat detail, timeline Progress, summary & Root Cause Ticket
 - **Portal Admin** — list semua tiket, filter status/tipe, update status, reassign petugas
 - **Status Flow Support** — OPEN → PENDING → IN_PROGRESS → DONE / REJECT
 - **Status Flow Incident** — OPEN → INVESTIGASI → MITIGASI → RESOLVED
@@ -144,7 +143,7 @@ Setiap tiket yang masuk (dari Formbricks maupun Static Form) akan otomatis:
 - Command `!status`, `!assign`, `!evidence` untuk update tiket dari Discord
 - AI Chatbot via @mention
 
-### AI & Automation (N8N + Groq)
+### AI & Automation (N8N + (Groq))
 - **Auto-classification** — tipe incident, prioritas, area suspect
 - **Auto-summary** — Summary semua percakapan diskusi dan root cause ticket
 - **Smart Recommendation** — saran solusi berdasarkan tiket serupa
@@ -152,7 +151,7 @@ Setiap tiket yang masuk (dari Formbricks maupun Static Form) akan otomatis:
 
 ### Reporting
 - Generate laporan incident otomatis dalam format HTML
-- Export data tiket Support & Incident ke CSV
+- Export data tiket Support & Incident bulanan ke CSV
 - Dashboard admin dengan statistik real-time
 
 ---
@@ -691,5 +690,5 @@ docker compose -f docker-compose.prod.yml logs backend | grep -i webhook
 ---
 
 <p align="center">
-  Copyright © 2026 Oleh Tim Rusdianto
+  Copyright © 2026 Oleh Tim IT @SEAMOLEC
 </p>

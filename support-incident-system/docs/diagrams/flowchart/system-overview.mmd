@@ -1,0 +1,18 @@
+flowchart TD
+    START(["START"]) --> A["Access Portal"]
+    A --> B{"Dashboard Home Page"}
+    B -->|"View Detail"| VD["View Detail Ticket"]
+    B -->|"Create New Ticket"| C["Create New Ticket"]
+
+    subgraph TFF ["  Ticket Form Flow  "]
+        direction TB
+        C --> E["Fill Support Details"]
+        E --> G["Validate Input"]
+        G --> H["Submit Ticket"]
+        H --> I["Notify Email"]
+    end
+
+    I --> K{"Ticket Info?"}
+    VD --> K
+    K -->|"View Detail Ticket"| L["View Detail Ticket"]
+    L --> STOP(["STOP"])

@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    participant FB as Formbricks<br/>Cloud Form
+    participant NG as Ngrok<br/>Tunnel
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Bot Service
+    participant Notif as Notifikasi<br/>Email dan N8N
+
+    Note over FB, BE: User mengisi form Formbricks<br/>(Support ATAU Incident)
+
+    FB ->> NG: POST payload + surveyId + questions
+    activate NG
+    NG ->> BE: Forward POST /webhook/formbricks
+    deactivate NG
+    activate BE
+
+    BE ->> BE: parseFormbricksPayload (body)
+    BE ->> BE: Deteksi surveyId - Support atau Incident
+    BE ->> BE: Map field ID ke label via FIELD_MAP
+
+    alt Validasi payload gagal
+        BE -->> NG: 400 Bad Request
+        NG -->> FB: Error - webhook failed
+    else Payload valid
+        BE ->> DB: submission.create (rawPayload)
+        activate DB
+        DB -->> BE: submission saved
+        deactivate DB
+
+        alt Survey = Form Tiket Support
+            BE ->> BE: createTicket (type=SUPPORT,<br/>formId=formbricks_support)
+        else Survey = Form Tiket Incident
+            BE ->> BE: createTicket (type=INCIDENT,<br/>formId=formbricks_incident)
+        end
+
+        BE ->> BE: Classifier - classifyTicketFields
+        BE ->> DB: ticket.create (ticketData)
+        activate DB
+        DB -->> BE: ticket id dan ticketNumber
+        deactivate DB
+
+        par Notifikasi Paralel
+            BE ->> Discord: postTicketToChannel (ticket)
+            activate Discord
+            Discord -->> BE: threadId
+            deactivate Discord
+        and
+            BE ->> Notif: sendConfirmation (email)
+            activate Notif
+            Notif -->> BE: Email + N8N triggered
+            deactivate Notif
+        end
+
+        BE -->> NG: 200 OK - ticketId
+        deactivate BE
+        NG -->> FB: 200 OK (webhook delivered)
+    end

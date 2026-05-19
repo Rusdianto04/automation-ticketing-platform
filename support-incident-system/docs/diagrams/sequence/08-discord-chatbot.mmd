@@ -1,0 +1,76 @@
+sequenceDiagram
+    autonumber
+    actor DUser as Discord User
+    participant DC as Discord
+    participant Bot as Chatbot<br/>Handler
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Groq as Groq AI<br/>LLM Service
+
+    DUser ->> DC: Mention @Bot pertanyaan
+    activate DC
+    DC ->> Bot: messageCreate event
+    deactivate DC
+    activate Bot
+
+    Bot ->> Bot: isRateLimited (userId)
+
+    alt User kena rate limit
+        Bot -->> DC: reply - Tunggu sebelum kirim lagi
+        activate DC
+        DC -->> DUser: Warning rate limit
+        deactivate DC
+    else Rate limit OK
+        Bot ->> Bot: markRequest (userId)
+        Bot ->> Bot: detectIntent (message)
+
+        alt Intent - Info Tiket (ada nomor tiket)
+            Bot ->> DB: ticket.findById (ticketId)
+            activate DB
+            DB -->> Bot: ticketData
+            deactivate DB
+            Bot -->> DC: reply embed info tiket
+            activate DC
+            DC -->> DUser: Info detail tiket
+            deactivate DC
+
+        else Intent - Laporan Incident
+            Bot ->> DB: ticket.findById (ticketId)
+            activate DB
+            DB -->> Bot: ticketData
+            deactivate DB
+            Bot ->> BE: triggerIncidentReport (ticket)
+            activate BE
+            BE -->> Bot: reportUrl atau pdfBuffer
+            deactivate BE
+            Bot -->> DC: reply dengan attachment PDF
+            activate DC
+            DC -->> DUser: PDF laporan terkirim
+            deactivate DC
+
+        else Intent - Pertanyaan umum AI
+            Bot ->> Bot: getConversationHistory (userId)
+            Bot ->> BE: GET /api/knowledge (search)
+            activate BE
+            BE ->> DB: knowledgeBase.findMany (keywords)
+            activate DB
+            DB -->> BE: relevant entries
+            deactivate DB
+            BE -->> Bot: context string
+            deactivate BE
+
+            Bot ->> Groq: API call - buildPrompt (question, context, history)
+            activate Groq
+            Groq -->> Bot: answer text
+            deactivate Groq
+
+            Bot ->> DB: chatbotInteraction.create (log)
+            Bot ->> Bot: pushHistory (userId, Q, A)
+            Bot ->> Bot: splitDiscordMessage (answer)
+            Bot -->> DC: reply dalam chunks
+            activate DC
+            DC -->> DUser: Jawaban AI terkirim
+            deactivate DC
+        end
+    end
+    deactivate Bot

@@ -1,0 +1,60 @@
+flowchart LR
+    ADMIN(["🛡️ Admin"])
+
+    subgraph SISTEM["Support & Incident System"]
+
+        subgraph AUTH["Autentikasi"]
+            UC_LOGIN(["Login Admin"])
+            UC_LOGOUT(["Logout"])
+        end
+
+        subgraph DASHBOARD["Dashboard"]
+            UC_STATS(["Lihat Statistik Tiket"])
+            UC_MONITOR(["Monitor Status Sistem"])
+        end
+
+        subgraph SUPPORT["Kelola Tiket Support"]
+            UC_SUB_SP(["Submit Tiket Support"])
+            UC_LIST_SP(["Lihat Daftar Tiket Support"])
+            UC_DETAIL_SP(["Lihat Detail Tiket Support"])
+            UC_STATUS_SP(["Update Status Support"])
+            UC_ASSIGN_SP(["Assign Petugas"])
+        end
+
+        subgraph INCIDENT["Kelola Tiket Incident"]
+            UC_SUB_INC(["Submit Tiket Incident"])
+            UC_LIST_INC(["Lihat Daftar Tiket Incident"])
+            UC_DETAIL_INC(["Lihat Detail Tiket Incident"])
+            UC_STATUS_INC(["Update Status Incident"])
+            UC_GEN_PDF(["Generate Laporan PDF"])
+        end
+
+        subgraph REPORT["Laporan & Export"]
+            UC_PREVIEW(["Preview Laporan PDF"])
+            UC_EXPORT_SP(["Export Support CSV"])
+            UC_EXPORT_INC(["Export Incident CSV"])
+        end
+
+    end
+
+    %% Actor → Use Case
+    ADMIN --- UC_LOGIN
+    ADMIN --- UC_LOGOUT
+    ADMIN --- UC_STATS
+    ADMIN --- UC_SUB_SP
+    ADMIN --- UC_LIST_SP
+    ADMIN --- UC_SUB_INC
+    ADMIN --- UC_LIST_INC
+    ADMIN --- UC_GEN_PDF
+    ADMIN --- UC_EXPORT_SP
+    ADMIN --- UC_EXPORT_INC
+
+    %% Include relationships
+    UC_LOGIN -.->|include| UC_STATS
+    UC_STATS -.->|include| UC_MONITOR
+    UC_LIST_SP -.->|include| UC_DETAIL_SP
+    UC_DETAIL_SP -.->|include| UC_STATUS_SP
+    UC_DETAIL_SP -.->|include| UC_ASSIGN_SP
+    UC_LIST_INC -.->|include| UC_DETAIL_INC
+    UC_DETAIL_INC -.->|include| UC_STATUS_INC
+    UC_GEN_PDF -.->|include| UC_PREVIEW

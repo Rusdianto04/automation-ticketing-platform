@@ -1,0 +1,83 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Portal<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant Discord as Discord<br/>Bot Service
+    participant N8N as N8N<br/>Automation
+
+    Admin ->> FE: Buka /admin/tickets
+    activate FE
+    FE ->> BE: GET /api/admin/tickets
+    activate BE
+    BE ->> DB: ticket.findMany (orderBy created_at)
+    activate DB
+    DB -->> BE: tickets array
+    deactivate DB
+    BE -->> FE: tickets data
+    deactivate BE
+    FE -->> Admin: Tampil tabel tiket + filter
+    deactivate FE
+
+    Admin ->> FE: Klik tiket - Buka Detail
+    activate FE
+    FE ->> BE: GET /api/ticket/:id
+    activate BE
+    BE ->> DB: ticket.findUnique + activities
+    activate DB
+    DB -->> BE: fullTicketData
+    deactivate DB
+    BE -->> FE: fullTicketData
+    deactivate BE
+    FE -->> Admin: Tampil AdminTicketDetailClient
+    deactivate FE
+
+    Admin ->> FE: Update Status - contoh PENDING ke IN_PROGRESS
+    activate FE
+    FE ->> BE: POST /api/ticket/:id/status
+    activate BE
+    BE ->> BE: Ticket Service - updateStatus (id, status, note)
+    BE ->> DB: ticket.update (status_pengusulan, note)
+    activate DB
+    DB -->> BE: updated ticket
+    deactivate DB
+    BE ->> DB: activity.create (STATUS_UPDATED)
+
+    BE ->> Discord: updateThreadTitle (ticket)
+    activate Discord
+    Discord -->> BE: thread title updated
+    deactivate Discord
+    BE ->> Discord: updateTicketMessage (ticket)
+    activate Discord
+    Discord -->> BE: message updated
+    deactivate Discord
+
+    BE ->> N8N: triggerWorkflow (status.changed)
+    activate N8N
+    N8N -->> BE: triggered
+    deactivate N8N
+
+    BE -->> FE: 200 OK - updated ticket
+    deactivate BE
+    FE -->> Admin: Badge status terupdate + notif sukses
+    deactivate FE
+
+    Admin ->> FE: Assign Petugas - input nama petugas
+    activate FE
+    FE ->> BE: POST /api/ticket/:id/assign
+    activate BE
+    BE ->> BE: Ticket Service - assignTicket (id, assignees)
+    BE ->> DB: ticket.update (assignee JSON)
+    activate DB
+    DB -->> BE: updated
+    deactivate DB
+    BE ->> DB: activity.create (ASSIGNED)
+    BE ->> Discord: updateTicketMessage (ticket)
+    activate Discord
+    Discord -->> BE: updated
+    deactivate Discord
+    BE -->> FE: 200 OK
+    deactivate BE
+    FE -->> Admin: Nama assignee terupdate
+    deactivate FE

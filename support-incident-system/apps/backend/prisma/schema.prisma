@@ -1,14 +1,11 @@
 // ================================================================
 // prisma/schema.prisma
-// Support & Incident Portal — Prisma ORM
-// Updated: Static Form Support (tanpa Formbricks)
+// Support & Incident Automation System — FINAL COMPLETE SCHEMA
 //
-// PERUBAHAN v6:
-//   • form_id: tetap ada sebagai identifier sumber form
-//     ("static_portal", "discord_bot", "peppermint_portal")
-//   • form_fields: JSON menyimpan semua field form support & incident
-//   • evidence_attachment: JSON array menyimpan path/URL file upload
-//   • Hapus referensi Formbricks dari komentar
+// Hanya tabel yang benar-benar DIBUAT OLEH SISTEM INI:
+//   Ticket, Submission, Activity, KnowledgeBase,
+//   ChatbotInteraction, IncidentReport,
+//   SmartThreadTemplate, AuditLog
 // ================================================================
 
 generator client {
@@ -22,41 +19,39 @@ datasource db {
 
 // ----------------------------------------------------------------
 // Tabel: tickets
-// Menyimpan tiket support & incident dari Static Form / Discord
+// Tiket support & insiden dari Static Portal / Discord Bot
 // ----------------------------------------------------------------
 model Ticket {
-  id                      Int        @id @default(autoincrement())
-  type                    String     @db.VarChar(50)
-  form_id                 String     @db.VarChar(255)
-  form_fields             Json       @default("{}")
-  status_pengusulan       String     @default("OPEN") @db.VarChar(50)
-  status_note             String?
-  assignee                Json?      @default("[]")
-  timeline_tindak_lanjut  String?
-  timeline_action_taken   String?
-  evidence_attachment     Json?      @default("[]")
-  discord                 Json?
-  summary_ticket          String?
-  root_cause              String?
-  search_keywords         String[]   @default([])
-  resolved_at             DateTime?  @db.Timestamptz()
-  created_at              DateTime   @default(now()) @db.Timestamptz()
-  updated_at              DateTime   @default(now()) @db.Timestamptz()
+  id                     Int       @id @default(autoincrement())
+  type                   String    @db.VarChar(50)
+  form_id                String    @db.VarChar(255)
+  form_fields            Json      @default("{}")
+  status_pengusulan      String    @default("OPEN") @db.VarChar(50)
+  status_note            String?
+  assignee               Json?     @default("[]")
+  timeline_tindak_lanjut String?
+  timeline_action_taken  String?
+  evidence_attachment    Json?     @default("[]")
+  discord                Json?
+  summary_ticket         String?
+  root_cause             String?
+  search_keywords        String[]  @default([])
+  resolved_at            DateTime? @db.Timestamptz()
+  created_at             DateTime  @default(now()) @db.Timestamptz()
+  updated_at             DateTime  @default(now()) @db.Timestamptz()
 
-  // Relasi
   activities Activity[]
 
   @@index([type])
   @@index([status_pengusulan])
   @@index([form_id])
   @@index([created_at])
-
   @@map("tickets")
 }
 
 // ----------------------------------------------------------------
 // Tabel: submissions
-// Raw payload dari form submission (static portal / Discord)
+// Raw payload form sebelum diproses menjadi tiket
 // ----------------------------------------------------------------
 model Submission {
   id         Int      @id @default(autoincrement())
@@ -66,13 +61,12 @@ model Submission {
 
   @@index([form_id])
   @@index([created_at])
-
   @@map("submissions")
 }
 
 // ----------------------------------------------------------------
 // Tabel: activities
-// Audit log per tiket (relasi ke tickets)
+// Audit log per tiket — CASCADE DELETE saat tiket dihapus
 // ----------------------------------------------------------------
 model Activity {
   id          Int      @id @default(autoincrement())
@@ -85,73 +79,113 @@ model Activity {
 
   @@index([ticket_id])
   @@index([created_at])
-
   @@map("activities")
 }
 
 // ----------------------------------------------------------------
 // Tabel: knowledge_base
-// Runbook & artikel KB
+// Runbook, SOP, artikel KB untuk AI chatbot
 // ----------------------------------------------------------------
 model KnowledgeBase {
-  id           Int      @id @default(autoincrement())
-  category     String   @db.VarChar(100)
-  title        String   @db.VarChar(500)
-  content      String
-  keywords     String[] @default([])
-  usage_count  Int      @default(0)
-  success_rate Float    @default(0)
-  created_by   String   @default("system") @db.VarChar(100)
-  created_at   DateTime @default(now()) @db.Timestamptz()
-  updated_at   DateTime @default(now()) @db.Timestamptz()
+  id                 Int      @id @default(autoincrement())
+  category           String   @db.VarChar(100)
+  title              String   @db.VarChar(500)
+  content            String
+  keywords           String[] @default([])
+  related_ticket_ids Int[]    @default([])
+  usage_count        Int      @default(0)
+  success_rate       Decimal  @default(0) @db.Decimal(5, 2)
+  created_by         String   @default("system") @db.VarChar(100)
+  created_at         DateTime @default(now()) @db.Timestamptz()
+  updated_at         DateTime @default(now()) @db.Timestamptz()
 
   @@index([category])
   @@index([usage_count])
-
   @@map("knowledge_base")
 }
 
 // ----------------------------------------------------------------
 // Tabel: chatbot_interactions
-// Log interaksi AI chatbot
+// Log interaksi AI chatbot (Discord + portal)
 // ----------------------------------------------------------------
 model ChatbotInteraction {
-  id                  Int      @id @default(autoincrement())
-  ticket_id           Int?
-  user_id             String   @db.VarChar(50)
-  user_name           String   @db.VarChar(255)
-  question            String
-  answer              String
-  intent              String   @default("general") @db.VarChar(50)
-  context_used        Json?    @default("{}")
-  groq_model          String?  @db.VarChar(100)
-  processing_time_ms  Int?     @default(0)
-  created_at          DateTime @default(now()) @db.Timestamptz()
+  id                 Int      @id @default(autoincrement())
+  ticket_id          Int?
+  user_id            String   @db.VarChar(50)
+  user_name          String   @db.VarChar(255)
+  question           String
+  answer             String
+  intent             String   @default("general") @db.VarChar(50)
+  context_used       Json?    @default("{}")
+  groq_model         String?  @db.VarChar(100)
+  processing_time_ms Int?     @default(0)
+  created_at         DateTime @default(now()) @db.Timestamptz()
 
   @@index([ticket_id])
   @@index([intent])
   @@index([created_at])
-
+  @@index([user_id])
   @@map("chatbot_interactions")
 }
 
 // ----------------------------------------------------------------
 // Tabel: incident_reports
-// Laporan insiden yang digenerate
+// Laporan insiden yang digenerate (HTML/PDF)
 // ----------------------------------------------------------------
 model IncidentReport {
   id             Int      @id @default(autoincrement())
-  ticket_id      Int
+  ticket_id      Int?
   report_type    String   @default("STANDARD") @db.VarChar(50)
   report_title   String   @db.VarChar(500)
   report_content Json
-  file_path      String?
-  file_url       String?
+  file_path      String?  @db.VarChar(500)
+  file_url       String?  @db.VarChar(500)
   generated_by   String   @default("system") @db.VarChar(255)
   generated_at   DateTime @default(now()) @db.Timestamptz()
+  report_format  String?  @default("HTML") @db.VarChar(20)
+  download_count Int?     @default(0)
 
   @@index([ticket_id])
   @@index([generated_at])
-
   @@map("incident_reports")
+}
+
+// ----------------------------------------------------------------
+// Tabel: smart_thread_templates
+// Template thread Discord untuk auto-format & auto-assign
+// ----------------------------------------------------------------
+model SmartThreadTemplate {
+  id                   Int      @id @default(autoincrement())
+  template_name        String   @db.VarChar(255)
+  ticket_type          String   @db.VarChar(50)
+  trigger_keywords     String[] @default([])
+  form_fields_template Json     @default("{}")
+  auto_assign_rules    Json?    @default("{}")
+  priority_level       String   @default("MEDIUM") @db.VarChar(50)
+  usage_count          Int      @default(0)
+  created_at           DateTime @default(now()) @db.Timestamptz()
+  updated_at           DateTime @default(now()) @db.Timestamptz()
+
+  @@index([ticket_type])
+  @@map("smart_thread_templates")
+}
+
+// ----------------------------------------------------------------
+// Tabel: audit_logs  ← JAMAK, bukan 'audit_log' milik n8n
+// Audit log sistem-level (admin actions, API calls penting)
+// ----------------------------------------------------------------
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  entity_type String   @db.VarChar(50)
+  entity_id   Int?
+  action      String   @db.VarChar(100)
+  actor       String?  @db.VarChar(255)
+  details     Json?    @default("{}")
+  ip_address  String?  @db.Inet
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@index([entity_type, entity_id])
+  @@index([actor])
+  @@index([created_at])
+  @@map("audit_logs")
 }

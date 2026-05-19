@@ -1,0 +1,65 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin
+    participant FE as Admin Portal<br/>Next.js :3001
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+    participant RPT as Report<br/>Service PDF
+    participant FS as File System<br/>Storage
+
+    Admin ->> FE: Buka /admin/reports
+    activate FE
+    FE ->> BE: GET /api/admin/stats
+    activate BE
+    BE ->> DB: Query total tiket per status dan tipe
+    activate DB
+    DB -->> BE: statsData
+    deactivate DB
+    BE -->> FE: statsData
+    deactivate BE
+    FE -->> Admin: Dashboard statistik laporan
+    deactivate FE
+
+    Admin ->> FE: Pilih tiket incident<br/>Klik Generate Laporan PDF
+    activate FE
+    FE ->> BE: POST /api/report/generate (ticketId)
+    activate BE
+
+    BE ->> BE: Incident Service - getIncidentDetail
+    BE ->> DB: ticket.findUnique + activities + report
+    activate DB
+    DB -->> BE: fullIncidentData
+    deactivate DB
+
+    BE ->> RPT: generateReport (incidentDetail)
+    activate RPT
+    RPT ->> RPT: renderHTML via template Handlebars
+    RPT ->> RPT: puppeteer.launch()
+    RPT ->> RPT: page.setContent (html)
+    RPT ->> RPT: page.pdf (format=A4)
+    RPT ->> FS: writeFile ke reportDir
+    activate FS
+    FS -->> RPT: filePath saved
+    deactivate FS
+    RPT ->> DB: incidentReport.create (filePath, fileUrl)
+    activate DB
+    DB -->> RPT: report record saved
+    deactivate DB
+    RPT ->> DB: activity.create (REPORT_GENERATED)
+    RPT -->> BE: reportPath, reportUrl
+    deactivate RPT
+
+    BE -->> FE: downloadUrl, reportId
+    deactivate BE
+    FE -->> Admin: Tampil tombol Download + Preview
+    deactivate FE
+
+    opt Download PDF
+        Admin ->> FE: Klik Download PDF
+        activate FE
+        FE ->> FS: GET /reports/filename.pdf
+        activate FS
+        FS -->> Admin: PDF terunduh ke komputer
+        deactivate FS
+        deactivate FE
+    end

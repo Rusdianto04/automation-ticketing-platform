@@ -1,0 +1,125 @@
+erDiagram
+    tickets {
+Int      id                     PK
+String   type
+String   form_id
+Json     form_fields
+String   status_pengusulan
+String   status_note
+Json     assignee
+String   timeline_tindak_lanjut
+String   timeline_action_taken
+Json     evidence_attachment
+Json     discord
+String   summary_ticket
+String   root_cause
+String[] search_keywords
+DateTime resolved_at
+DateTime created_at
+DateTime updated_at
+    }
+    submissions {
+Int      id         PK
+String   form_id
+Json     payload
+DateTime created_at
+    }
+    activities {
+Int      id          PK
+Int      ticket_id   FK
+String   type
+String   description
+DateTime created_at
+    }
+    knowledge_base {
+Int      id                 PK
+String   category
+String   title
+String   content
+String[] keywords
+Int[]    related_ticket_ids
+Int      usage_count
+Decimal  success_rate
+String   created_by
+DateTime created_at
+DateTime updated_at
+    }
+    chatbot_interactions {
+Int      id                 PK
+Int      ticket_id          FK
+String   user_id
+String   user_name
+String   question
+String   answer
+String   intent
+Json     context_used
+String   groq_model
+Int      processing_time_ms
+DateTime created_at
+    }
+    incident_reports {
+Int      id             PK
+Int      ticket_id      FK
+String   report_type
+String   report_title
+Json     report_content
+String   file_path
+String   file_url
+String   generated_by
+DateTime generated_at
+String   report_format
+Int      download_count
+    }
+    smart_thread_templates {
+Int      id                   PK
+String   template_name
+String   ticket_type
+String[] trigger_keywords
+Json     form_fields_template
+Json     auto_assign_rules
+String   priority_level
+Int      usage_count
+DateTime created_at
+DateTime updated_at
+    }
+    audit_logs {
+Int      id          PK
+String   entity_type
+Int      entity_id
+String   action
+String   actor
+Json     details
+String   ip_address
+DateTime created_at
+    }
+    ticket_dashboard {
+Int      id
+String   type
+String   status_pengusulan
+String   issue
+String   incident_title
+String   reporter
+String   division
+Boolean  has_summary
+Boolean  has_root_cause
+String   thread_url
+DateTime created_at
+DateTime updated_at
+DateTime resolved_at
+Float    resolution_minutes
+    }
+    chatbot_analytics {
+String   intent
+Int      total_interactions
+Float    avg_processing_ms
+Int      unique_users
+Int      with_ticket_ctx
+Int      with_kb_ctx
+DateTime interaction_date
+    }
+
+    tickets ||--o{ activities             : "memiliki"
+    tickets ||--o{ incident_reports       : "memiliki"
+    tickets ||--o{ chatbot_interactions   : "terkait dengan"
+    tickets ||--|| ticket_dashboard       : "diringkas di"
+    chatbot_interactions ||--|| chatbot_analytics : "diagregasi di"

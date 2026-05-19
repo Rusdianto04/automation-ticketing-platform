@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant FE as Frontend<br/>Next.js Portal
+    participant BE as Backend<br/>Express API
+    participant DB as Database<br/>PostgreSQL
+
+    User ->> FE: Buka /dashboard
+    activate FE
+    FE ->> BE: GET /api/tickets (filter email atau ID)
+    activate BE
+    BE ->> DB: ticket.findMany (filter)
+    activate DB
+    DB -->> BE: list tiket array
+    deactivate DB
+    BE -->> FE: tickets JSON
+    deactivate BE
+    FE -->> User: Tampil list tiket + status badge
+    deactivate FE
+
+    User ->> FE: Klik tiket atau input ID tiket
+    activate FE
+    FE ->> BE: GET /api/ticket/:id
+    activate BE
+    BE ->> BE: Ticket Service - getTicketDetail (id)
+    BE ->> DB: ticket.findUnique + activities
+    activate DB
+    DB -->> BE: ticket + activities array
+    deactivate DB
+
+    alt Tiket tidak ditemukan
+        BE -->> FE: 404 Not Found
+        FE -->> User: Halaman 404 tiket tidak ditemukan
+    else Type = SUPPORT
+        BE -->> FE: ticketDetail (SUPPORT)
+        FE -->> User: Render TicketDetailSupport<br/>Info, Timeline, Summary AI, Rekomendasi
+    else Type = INCIDENT
+        BE -->> FE: ticketDetail (INCIDENT)
+        FE -->> User: Render TicketDetailIncident<br/>Info, Root Cause, Timeline, Evidence
+    end
+
+    deactivate BE
+    deactivate FE
+
+    opt Lihat Laporan Incident
+        User ->> FE: Klik Lihat Laporan PDF
+        activate FE
+        FE ->> BE: GET /api/admin/report-view/:id
+        activate BE
+        BE ->> DB: incidentReport.findFirst (ticketId)
+        activate DB
+        DB -->> BE: reportData
+        deactivate DB
+        BE -->> FE: reportData
+        deactivate BE
+        FE -->> User: Preview laporan incident
+        deactivate FE
+    end

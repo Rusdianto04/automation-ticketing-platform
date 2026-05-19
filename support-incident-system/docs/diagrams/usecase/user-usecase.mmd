@@ -1,0 +1,54 @@
+flowchart LR
+    USER(["👤 User"])
+
+    subgraph SISTEM["Support & Incident System"]
+
+        subgraph AKSES["Akses Portal"]
+            UC_DASH(["Buka Dashboard"])
+            UC_LIST(["Lihat Daftar Ticket"])
+            UC_CARI(["Cari Tiket by Nomor Ticket"])
+            UC_FILTER(["Filter Ticket by Status"])
+        end
+
+        subgraph SUBMIT["Submit Tiket Support"]
+            UC_STEP1(["Isi Data Konfirmasi Email Step 1"])
+            UC_STEP2(["Isi Data Diri Step 2"])
+            UC_STEP3(["Isi Data Detail Masalah Step 3"])
+            UC_EMAIL(["Terima Email Konfirmasi"])
+        end
+
+        subgraph DETAIL["Lihat Detail Tiket"]
+            UC_DETAIL(["Lihat Detail Tiket"])
+            UC_TIMELINE(["Lihat Timeline Progress"])
+            UC_SUMMARY(["Lihat Summary & Root Cause"])
+            UC_REKOMEND(["Lihat Rekomendasi Solusi Awal"])
+        end
+
+        subgraph FORMBRICKS["Formbricks - Form Online"]
+            UC_FB_SP(["Submit Form Support Via Formbricks"])
+            UC_FB_INC(["Submit Form Incident Via Formbricks"])
+            UC_FB_WH(["Kirim Webhook Otomatis ke Sistem"])
+        end
+
+    end
+
+    %% Actor ke Use Case
+    USER --- UC_DASH
+    USER --- UC_STEP1
+    USER --- UC_DETAIL
+    USER --- UC_EMAIL
+    USER --- UC_FB_SP
+    USER --- UC_FB_INC
+
+    %% Include relationships
+    UC_DASH -.->|include| UC_LIST
+    UC_DASH -.->|include| UC_CARI
+    UC_LIST -.->|include| UC_FILTER
+    UC_STEP1 -.->|include| UC_STEP2
+    UC_STEP2 -.->|include| UC_STEP3
+    UC_STEP3 -.->|include| UC_EMAIL
+    UC_DETAIL -.->|include| UC_TIMELINE
+    UC_DETAIL -.->|include| UC_SUMMARY
+    UC_DETAIL -.->|include| UC_REKOMEND
+    UC_FB_SP -.->|include| UC_FB_WH
+    UC_FB_INC -.->|include| UC_FB_WH
