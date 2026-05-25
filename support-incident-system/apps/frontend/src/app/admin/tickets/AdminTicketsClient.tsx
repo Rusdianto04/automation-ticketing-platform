@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Search, Filter, RefreshCw, ChevronRight, Plus,
   Ticket, Zap, X, CheckCircle2, Upload, Loader2, Image,
+  ChevronDown,
 } from "lucide-react";
 
 interface TicketRow {
@@ -41,7 +42,8 @@ const SUPPORT_OPTIONS  = ["Laptop/PC", "Printer", "Software/Application Error", 
 const PRIORITY_OPTIONS = ["Critical", "High", "Medium", "Low"];
 const SEVERITY_OPTIONS = ["SEV 1: Critical", "SEV 2: High", "SEV 3: Medium", "SEV 4: Low"];
 
-// Upload helper — dipanggil HANYA saat submit
+const PAGE_SIZE = 12;
+
 async function uploadFileToServer(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
@@ -51,7 +53,6 @@ async function uploadFileToServer(file: File): Promise<string> {
   return data.url as string;
 }
 
-// Helper: ambil tanggal & waktu saat ini dalam format WIB (dipanggil saat submit)
 function getNowWIB(): string {
   return new Date().toLocaleString("id-ID", {
     timeZone: "Asia/Jakarta",
@@ -65,6 +66,7 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
   const [filterType,   setFilterType]   = useState("");
   const [search,       setSearch]       = useState("");
   const [modal,        setModal]        = useState<null | "support" | "incident">(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const filtered = useMemo(() => {
     return tickets.filter((t) => {
@@ -85,6 +87,18 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
     });
   }, [tickets, filterStatus, filterType, search]);
 
+  // Reset visible count kalau filter berubah
+  const prevFilterKey = useRef("");
+  const filterKey = `${filterStatus}|${filterType}|${search}`;
+  if (filterKey !== prevFilterKey.current) {
+    prevFilterKey.current = filterKey;
+    if (visibleCount !== PAGE_SIZE) setVisibleCount(PAGE_SIZE);
+  }
+
+  const visibleTickets = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+  const remaining = filtered.length - visibleCount;
+
   return (
     <div className="min-h-screen bg-slate-100">
 
@@ -94,7 +108,11 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
           <div className="pl-10 sm:pl-0">
             <h1 className="text-[16px] font-bold text-slate-800">Manajemen Tiket</h1>
             <p className="text-[12px] text-slate-400 mt-0.5">
-              Menampilkan <strong className="text-slate-600">{filtered.length}</strong> dari {tickets.length} tiket
+              Menampilkan <strong className="text-slate-600">{visibleTickets.length}</strong> dari{" "}
+              <strong className="text-slate-600">{filtered.length}</strong> tiket
+              {filtered.length !== tickets.length && (
+                <span className="text-slate-400"> (total {tickets.length})</span>
+              )}
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -173,7 +191,7 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 ? (
+                {visibleTickets.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-16 text-center">
                       <div className="flex flex-col items-center gap-3 text-slate-400">
@@ -183,7 +201,7 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((t, idx) => (
+                  visibleTickets.map((t, idx) => (
                     <tr key={t.id} className={`transition-colors hover:bg-slate-50 ${t.type === "INCIDENT" ? "bg-rose-50/20 hover:bg-rose-50/40" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
                       <td className="px-4 py-3"><span className="font-mono font-bold text-indigo-600 text-[13px]">#{t.id}</span></td>
                       <td className="px-4 py-3 max-w-[200px]">
@@ -220,6 +238,30 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
               </tbody>
             </table>
           </div>
+
+          {/* ── Load More Button ── */}
+          {hasMore && (
+            <div className="border-t border-slate-100 px-4 py-4 flex items-center justify-center gap-3">
+              <button
+                onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-semibold transition-colors shadow-sm"
+              >
+                <ChevronDown size={15} />
+                Lihat Selanjutnya
+                <span className="bg-indigo-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  +{Math.min(PAGE_SIZE, remaining)}
+                </span>
+              </button>
+              <span className="text-[12px] text-slate-400">
+                {remaining} tiket lagi
+              </span>
+            </div>
+          )}
+          {!hasMore && filtered.length > PAGE_SIZE && (
+            <div className="text-center py-3 text-[12px] text-slate-300 border-t border-slate-100">
+              Semua {filtered.length} tiket telah ditampilkan
+            </div>
+          )}
         </div>
       </div>
 
@@ -230,8 +272,6 @@ export default function AdminTicketsClient({ tickets }: { tickets: TicketRow[] }
 }
 
 // ─── Admin Support Form Modal ──────────────────────────────────────────────────
-// SAMA dengan form users — tanggal & waktu TIDAK ditampilkan di form,
-// tapi tetap dikirim di background saat submit (diambil dari getNowWIB())
 
 function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
@@ -280,12 +320,8 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
     try {
       let attachmentUrl: string | null = null;
       if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
-
       const typeValue = form.typeOfSupport === "Other" ? (form.typeOther || "Other") : form.typeOfSupport;
-
-      // Tanggal & waktu diambil saat submit — tidak ditampilkan di form (sama seperti users)
       const tanggalWaktu = getNowWIB();
-
       const formFields: Record<string, string> = {
         "Reporter Information":      form.reporterInfo,
         "Division":                  form.division,
@@ -294,13 +330,12 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
         "ID Device":                 form.idDevice,
         "Ruangan":                   form.ruangan,
         "Lantai":                    form.lantai,
-        "Tanggal & Waktu Pemohon":   tanggalWaktu,   // background — tidak tampil di form
+        "Tanggal & Waktu Pemohon":   tanggalWaktu,
         "Type of Support Requested": typeValue,
         "Issue":                     form.issue,
         "Jumlah Barang":             form.jumlahBarang,
       };
       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
-
       const res  = await fetch("/api/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -338,7 +373,6 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
     <ModalWrap title="Buat Tiket Support (Admin)" onClose={onClose}>
       <div className="space-y-4">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <AField label="Reporter Information *" type="text"  value={form.reporterInfo} onChange={(v) => set("reporterInfo", v)} placeholder="Nama lengkap" />
           <AField label="Division *"             type="text"  value={form.division}     onChange={(v) => set("division", v)}     placeholder="Divisi / Departemen" />
@@ -347,8 +381,6 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
           <AField label="ID Device"              type="text"  value={form.idDevice}     onChange={(v) => set("idDevice", v)}     placeholder="Asset tag / serial" />
           <AField label="Ruangan *"              type="text"  value={form.ruangan}      onChange={(v) => set("ruangan", v)}      placeholder="Nama ruangan" />
         </div>
-
-        {/* Lantai */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Lantai *</label>
           <select value={form.lantai} onChange={(e) => set("lantai", e.target.value)}
@@ -357,8 +389,6 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
             {FLOOR_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>
-
-        {/* Type of Support */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Type of Support Requested *</label>
           <select value={form.typeOfSupport} onChange={(e) => set("typeOfSupport", e.target.value)}
@@ -372,18 +402,13 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
               className="mt-2 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400" />
           )}
         </div>
-
-        {/* Issue */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Issue — Deskripsi Masalah *</label>
           <textarea value={form.issue} onChange={(e) => set("issue", e.target.value)} rows={3}
             placeholder="Deskripsi masalah secara detail..."
             className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-indigo-400 resize-none" />
         </div>
-
         <AField label="Jumlah Barang" type="text" value={form.jumlahBarang} onChange={(v) => set("jumlahBarang", v)} placeholder="Contoh: 1 unit laptop" />
-
-        {/* Attachment */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
           <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
@@ -412,7 +437,6 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
         </div>
-
         <div className="flex gap-2 pt-2">
           <button onClick={handleSubmit} disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-[13px] font-bold transition-colors">
@@ -426,7 +450,6 @@ function AdminSupportFormModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Admin Incident Form Modal ─────────────────────────────────────────────────
-// Tanggal & waktu incident TIDAK ditampilkan — diambil di background saat submit
 
 function AdminIncidentFormModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
@@ -475,21 +498,17 @@ function AdminIncidentFormModal({ onClose }: { onClose: () => void }) {
     try {
       let attachmentUrl: string | null = null;
       if (selectedFile) attachmentUrl = await uploadFileToServer(selectedFile);
-
-      // Date & Time Incident diambil saat submit — tidak tampil di form (sama seperti users)
       const dateTimeIncident = getNowWIB();
-
       const formFields: Record<string, string> = {
         "Incident Title":       form.incidentTitle,
         "Incident Information": form.incidentTitle,
-        "Date & Time Incident": dateTimeIncident,   // background — tidak tampil di form
+        "Date & Time Incident": dateTimeIncident,
         "Priority Incident":    form.priorityIncident,
         "Severity Incident":    form.severityIncident,
         "Suspect Area":         form.suspectArea,
         "Indicated Issue":      form.indicatedIssue,
       };
       if (attachmentUrl) formFields["Attachment"] = attachmentUrl;
-
       const res  = await fetch("/api/tickets/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -526,9 +545,7 @@ function AdminIncidentFormModal({ onClose }: { onClose: () => void }) {
     <ModalWrap title="Laporkan Incident (Admin)" onClose={onClose}>
       <div className="space-y-4">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-[13px]">{error}</div>}
-
         <AField label="Incident Title *" type="text" value={form.incidentTitle} onChange={(v) => set("incidentTitle", v)} placeholder="Judul singkat incident" />
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Priority Incident *</label>
@@ -547,17 +564,13 @@ function AdminIncidentFormModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
-
         <AField label="Suspect Area *" type="text" value={form.suspectArea} onChange={(v) => set("suspectArea", v)} placeholder="Area/sistem yang bermasalah" />
-
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Indicated Issue *</label>
           <textarea value={form.indicatedIssue} onChange={(e) => set("indicatedIssue", e.target.value)} rows={4}
             placeholder="Jelaskan indikasi masalah..."
             className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-[13px] bg-white text-slate-700 focus:outline-none focus:border-rose-400 resize-none" />
         </div>
-
-        {/* Attachment */}
         <div>
           <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attachment (Gambar / Screenshot)</label>
           <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-colors">
@@ -586,7 +599,6 @@ function AdminIncidentFormModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
         </div>
-
         <div className="flex gap-2 pt-2">
           <button onClick={handleSubmit} disabled={submitting}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-xl text-[13px] font-bold transition-colors">

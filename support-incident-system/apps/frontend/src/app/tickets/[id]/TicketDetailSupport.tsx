@@ -1,41 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { BackButton } from "./BackButton";
 import type { Ticket } from "@/types";
-import { StatusBadge, CardSection, TimelineSection } from "./SharedComponents";
+import { StatusBadge, TimelineSection } from "./SharedComponents";
 
-// ── Interface UserRecommendation — v11 final ──────────────────────────────────
-// Flat structure: 1 layout terpadu, bukan array steps
 interface UserRecommendation {
-  found:       boolean;
-  count:       number;
-  message:     string;
-  summary:     string;          // rangkuman terpadu dari semua kasus serupa
-  actionSteps: string[];        // langkah-langkah bersih tanpa timestamp
-  stepSource:  string;          // "ticket" | nama runbook
-  disclaimer:  string;
+  found: boolean;
+  count: number;
+  message: string;
+  summary: string;
+  actionSteps: string[];
+  stepSource: string;
+  disclaimer: string;
 }
 
 interface Props {
-  ticket:             Ticket;
-  title:              string;
-  requester:          string;
-  orgName:            string;
-  orgDepartment:      string;
-  createdAt:          string;
-  updatedAt:          string;
+  ticket: Ticket;
+  title: string;
+  requester: string;
+  orgName: string;
+  orgDepartment: string;
+  createdAt: string;
+  updatedAt: string;
   userRecommendation?: UserRecommendation | null;
 }
 
 export default function TicketDetailSupport({
   ticket, title, requester, orgName, orgDepartment,
-  userRecommendation,
+  createdAt, updatedAt, userRecommendation,
 }: Props) {
   const f         = ticket.form_fields;
   const status    = ticket.status_pengusulan;
   const assignees = Array.isArray(ticket.assignee) ? ticket.assignee : [];
-
   const summaryTicket = ticket.summary_ticket || "";
   const rootCause     = ticket.root_cause     || "";
   const timelineRaw   = ticket.timeline_tindak_lanjut || null;
@@ -43,204 +40,155 @@ export default function TicketDetailSupport({
   const rec    = userRecommendation;
   const hasRec = rec?.found && (rec.summary || rec.actionSteps?.length > 0);
 
-  return (
-    <div className="min-h-screen" style={{ background: "#d9e1f2" }}>
+  const assigneeNames = assignees.map((a) =>
+    typeof a === "string" ? a : (a as any)?.displayName || (a as any)?.username || (a as any)?.name || "—"
+  ).join(", ") || "—";
 
-      {/* ── Header ── */}
+  return (
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#f1f5f9" }}>
+
+      {/* Header */}
       <header
-        className="text-white sticky top-0 z-30"
-        style={{
-          background:   "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}
+        className="sticky top-0 z-30 text-white"
+        style={{ background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
-        <div className="w-full px-5 sm:px-8 lg:px-10">
-          <div className="flex items-center justify-between h-20">
-            <div className="flex items-center gap-2 text-[13px]">
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1.5 text-slate-300 hover:text-white transition"
-              >
-                <ArrowLeft size={15} />
-                Kembali ke Dashboard
-              </Link>
-              <ChevronRight size={14} className="text-slate-500" />
-              <span className="font-mono text-indigo-300">#{ticket.id}</span>
-            </div>
-            <div className="text-right">
-              <p className="text-[12px] font-semibold">{orgName}</p>
-              <p className="text-[11px] text-slate-400">{orgDepartment}</p>
+        <div style={{ maxWidth: 860, margin: "0 auto", padding: "0 20px" }}>
+          <div className="flex items-center justify-between h-16">
+            <BackButton />
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[12px] text-slate-400">#{ticket.id}</span>
+              <StatusBadge status={status} />
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-5">
-          <CardSection
-            header={
-              <div className="w-full text-center py-2">
-                <h1 className="text-[20px] font-bold text-white">{title}</h1>
-                <p className="text-[12px] text-white/70 mt-1">Ticket Report</p>
-              </div>
-            }
-          >
-            <table className="w-full text-[13px]">
-              <tbody className="divide-y divide-slate-100">
+      <main className="flex-1 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%", padding: "24px 20px" }}>
 
-                {/* ── Info ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <InfoBlock label="Reporter"        value={requester} />
-                      <InfoBlock label="Division"        value={(f["Division"] || f["Departemen"] || f["Department"]) as string} />
-                      <InfoBlock label="ID Device"       value={f["ID Device"] as string} />
-                      <InfoBlock label="Type of Support" value={(f["Type of Support Requested"] || f["Kategori"]) as string} />
-                      <InfoBlock label="Status"          value={<StatusBadge status={status} />} />
-                      <InfoBlock label="Petugas"         value={<AssigneeInline assignees={assignees} />} />
-                    </div>
-                  </td>
-                </tr>
-
-                {/* ── Summary ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Summary</h3>
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                      {summaryTicket || "Hasil Belum Ditemukan"}
-                    </p>
-                  </td>
-                </tr>
-
-                {/* ── SMART RECOMMENDATION — 1 Layout Terpadu ──
-                    v12: Simplified — hapus pesan intro & disclaimer
-                    Hanya header + ringkasan + langkah-langkah ── */}
-                {hasRec && (
-                  <tr>
-                    <td colSpan={2} className="px-5 pb-6">
-                      <div
-                        className="rounded-xl overflow-hidden"
-                        style={{ border: "1px solid #e2e8f0" }}
-                      >
-                        {/* ── Card Header ── */}
-                        <div
-                          className="px-4 py-3 flex items-center gap-2"
-                          style={{ background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)" }}
-                        >
-                          <span className="text-white text-[11px] font-bold uppercase tracking-wider">
-                            💡 Panduan Sementara
-                          </span>
-                          <span className="ml-auto text-white/50 text-[10px]">
-                            Berdasarkan kasus serupa
-                          </span>
-                        </div>
-
-                        {/* ── Card Body ── */}
-                        <div className="px-4 py-4 space-y-3" style={{ background: "#f8fafc" }}>
-
-                          {/* Ringkasan singkat (jika ada) */}
-                          {rec!.summary && (
-                            <p
-                              className="text-[12px] text-slate-600 leading-relaxed border-l-4 pl-3"
-                              style={{ borderColor: "#334155" }}
-                            >
-                              {rec!.summary}
-                            </p>
-                          )}
-
-                          {/* Langkah-langkah — numbered, tanpa tanggal/waktu */}
-                          {rec!.actionSteps && rec!.actionSteps.length > 0 && (
-                            <div>
-                              <p
-                                className="text-[10px] font-bold uppercase tracking-wide mb-3"
-                                style={{ color: "#64748b" }}
-                              >
-                                📋 Langkah-langkah yang Dapat Anda Coba:
-                              </p>
-                              <ol className="space-y-2.5">
-                                {rec!.actionSteps.map((action, ai) => (
-                                  <li key={ai} className="flex items-start gap-3">
-                                    {/* Nomor lingkaran */}
-                                    <span
-                                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white mt-0.5"
-                                      style={{ background: "#1e293b", minWidth: "1.5rem" }}
-                                    >
-                                      {ai + 1}
-                                    </span>
-                                    <span className="text-[12px] text-slate-700 leading-relaxed">
-                                      {action}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
-                          )}
-
-                          {/* Fallback jika tidak ada konten sama sekali */}
-                          {(!rec!.actionSteps || rec!.actionSteps.length === 0) && !rec!.summary && (
-                            <p className="text-[12px] text-slate-500 italic">
-                              Saat ini belum ada langkah spesifik yang tersedia. Teknisi kami akan segera membantu Anda.
-                            </p>
-                          )}
-
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {/* ── Root Cause ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Root Cause</h3>
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                      {rootCause || "Permasalahan Belum Ditemukan"}
-                    </p>
-                  </td>
-                </tr>
-
-                {/* ── Timeline ── */}
-                <tr>
-                  <td colSpan={2} className="px-5 py-5">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-4">Timeline</h3>
-                    <TimelineSection items={timelineRaw} />
-                  </td>
-                </tr>
-
-              </tbody>
-            </table>
-          </CardSection>
+        {/* Title block */}
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: "#eff6ff", color: "#1e40af", border: "1px solid #bfdbfe" }}
+            >
+              Support Ticket
+            </span>
+          </div>
+          <h1 className="text-[22px] font-bold text-slate-800 leading-snug">{title}</h1>
+          <p className="text-[12px] text-slate-400 mt-1">{orgName} — {orgDepartment}</p>
         </div>
+
+        {/* Info grid */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Informasi Tiket</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0 divide-x divide-y divide-slate-100">
+            <InfoCell label="Reporter" value={requester} />
+            <InfoCell label="Division" value={(f["Division"] || f["Departemen"] || f["Department"] || "—") as string} />
+            <InfoCell label="Type of Support" value={(f["Type of Support Requested"] || f["Kategori"] || "—") as string} />
+            <InfoCell label="Ruangan" value={(f["Ruangan"] || "—") as string} />
+            <InfoCell label="Lantai" value={(f["Lantai"] || "—") as string} />
+            <InfoCell label="Petugas" value={assigneeNames} />
+            <InfoCell label="Dibuat" value={createdAt} />
+            <InfoCell label="Diperbarui" value={updatedAt} />
+            <InfoCell label="Status" value={<StatusBadge status={status} />} />
+          </div>
+        </div>
+
+        {/* Issue */}
+        {f["Issue"] && (
+          <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+            <div className="px-5 py-3 border-b border-slate-100">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Deskripsi Masalah</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">{f["Issue"] as string}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Smart Recommendation */}
+        {hasRec && (
+          <div className="bg-white rounded-xl mb-4 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
+            <div className="px-5 py-3 border-b border-slate-100" style={{ background: "#0f172a" }}>
+              <p className="text-[11px] font-bold text-white uppercase tracking-wider">Panduan Sementara</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Berdasarkan kasus serupa</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {rec!.summary && (
+                <p className="text-[13px] text-slate-600 leading-relaxed border-l-2 pl-3" style={{ borderColor: "#334155" }}>
+                  {rec!.summary}
+                </p>
+              )}
+              {rec!.actionSteps && rec!.actionSteps.length > 0 && (
+                <ol className="space-y-2">
+                  {rec!.actionSteps.map((action, ai) => (
+                    <li key={ai} className="flex items-start gap-3">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white mt-0.5" style={{ background: "#1e293b" }}>
+                        {ai + 1}
+                      </span>
+                      <span className="text-[12px] text-slate-700 leading-relaxed">{action}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Summary</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-[13px] text-slate-600 whitespace-pre-wrap leading-relaxed">
+              {summaryTicket || "Summary belum tersedia."}
+            </p>
+          </div>
+        </div>
+
+        {/* Root Cause */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Root Cause</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-[13px] text-slate-600 whitespace-pre-wrap leading-relaxed">
+              {rootCause || "Root Cause belum ditemukan."}
+            </p>
+          </div>
+        </div>
+
+        {/* Timeline */}
+        <div className="bg-white rounded-xl" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Progress Tindak Lanjut</p>
+          </div>
+          <div className="px-5 py-4">
+            <TimelineSection items={timelineRaw} />
+          </div>
+        </div>
+
       </main>
+
+      <footer className="py-8">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-40 h-px" style={{ background: "linear-gradient(90deg, transparent, #94a3b8, transparent)" }} />
+          <p className="text-[11px] text-slate-400 tracking-wider">Copyright © {new Date().getFullYear()} SEAMOLEC, Org.</p>
+        </div>
+      </footer>
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function InfoBlock({ label, value }: { label: string; value: React.ReactNode }) {
-  if (!value) return null;
+function InfoCell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[11px] text-slate-400">{label}</p>
-      <div className="text-[13px] font-medium text-slate-700">{value}</div>
-    </div>
-  );
-}
-
-function AssigneeInline({ assignees }: { assignees: any[] }) {
-  if (!assignees || assignees.length === 0)
-    return <span className="text-slate-400 italic">-</span>;
-  return (
-    <div className="flex flex-wrap gap-2">
-      {assignees.map((a, i) => {
-        const name = typeof a === "string" ? a : a?.name || a?.username || "Unknown";
-        return (
-          <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] rounded-full">
-            {name}
-          </span>
-        );
-      })}
+    <div className="px-5 py-3.5 flex flex-col gap-0.5">
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{label}</span>
+      <span className="text-[13px] font-medium text-slate-700">{value || "—"}</span>
     </div>
   );
 }

@@ -30,13 +30,10 @@ function formatAssignee(assignee: unknown): string {
     .filter(Boolean).join(", ") || "—";
 }
 
-// Ambil URL attachment dari form_fields["Attachment"] atau evidence_attachment
 function getAttachmentUrl(ff: Record<string, unknown>, evidence: unknown): string | null {
-  // Prioritas 1: form_fields["Attachment"] (dari static form)
   if (ff["Attachment"] && typeof ff["Attachment"] === "string" && ff["Attachment"].trim()) {
     return ff["Attachment"].trim();
   }
-  // Prioritas 2: evidence_attachment array (dari Discord bot)
   if (!evidence) return null;
   let arr: unknown = evidence;
   if (typeof arr === "string") { try { arr = JSON.parse(arr); } catch { return null; } }
@@ -57,36 +54,72 @@ const borderAll: Partial<ExcelJS.Borders> = {
   right:  { style: "thin", color: { argb: "FF000000" } },
 };
 
+const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
 export async function GET(req: NextRequest) {
   try {
-    const url   = new URL(req.url);
-    const month = parseInt(url.searchParams.get("month") || "0", 10);
-    const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+    const url       = new URL(req.url);
+    const rangeMode = url.searchParams.get("rangeMode");
+    const now       = new Date();
 
-    const now         = new Date();
-    const targetMonth = month > 0 ? month : now.getMonth() + 1;
-    const targetYear  = year  > 0 ? year  : now.getFullYear();
+    let startUTC: Date;
+    let endUTC: Date;
+    let periodLabel: string;
 
-    const startUTC = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
-    const endUTC   = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
+    if (rangeMode === "range") {
+      const sd = parseInt(url.searchParams.get("startDay")   || "1", 10);
+      const sm = parseInt(url.searchParams.get("startMonth") || "0", 10);
+      const sy = parseInt(url.searchParams.get("startYear")  || "0", 10);
+      const ed = parseInt(url.searchParams.get("endDay")     || "1", 10);
+      const em = parseInt(url.searchParams.get("endMonth")   || "0", 10);
+      const ey = parseInt(url.searchParams.get("endYear")    || "0", 10);
 
-    const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-    const monthLabel = MONTHS_ID[targetMonth] || `Bulan${targetMonth}`;
+      const startDay   = sd > 0 ? sd : 1;
+      const startMonth = sm > 0 ? sm : now.getMonth() + 1;
+      const startYear  = sy > 0 ? sy : now.getFullYear();
+      const endDay     = ed > 0 ? ed : now.getDate();
+      const endMonth   = em > 0 ? em : now.getMonth() + 1;
+      const endYear    = ey > 0 ? ey : now.getFullYear();
 
-    const result = await apiExportTickets("support", {
+      // WIB = UTC+7, jadi geser -7 jam untuk konversi ke UTC
+      startUTC = new Date(Date.UTC(startYear, startMonth - 1, startDay,    0, 0, 0) - 7 * 3600 * 1000);
+      endUTC   = new Date(Date.UTC(endYear,   endMonth - 1,   endDay + 1,  0, 0, 0) - 7 * 3600 * 1000);
+
+      const slabel = MONTHS_ID[startMonth] || `Bulan${startMonth}`;
+      const elabel = MONTHS_ID[endMonth]   || `Bulan${endMonth}`;
+
+      if (startYear === endYear && startMonth === endMonth && startDay === endDay) {
+        periodLabel = `${startDay} ${slabel} ${startYear}`;
+      } else if (startYear === endYear && startMonth === endMonth) {
+        periodLabel = `${startDay}–${endDay} ${slabel} ${startYear}`;
+      } else if (startYear === endYear) {
+        periodLabel = `${startDay} ${slabel} – ${endDay} ${elabel} ${startYear}`;
+      } else {
+        periodLabel = `${startDay} ${slabel} ${startYear} – ${endDay} ${elabel} ${endYear}`;
+      }
+    } else {
+      const month = parseInt(url.searchParams.get("month") || "0", 10);
+      const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+      const targetMonth = month > 0 ? month : now.getMonth() + 1;
+      const targetYear  = year  > 0 ? year  : now.getFullYear();
+      startUTC    = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
+      endUTC      = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
+      periodLabel = `${MONTHS_ID[targetMonth] || `Bulan${targetMonth}`} ${targetYear}`;
+    }
+
+    const result  = await apiExportTickets("support", {
       startDate: startUTC.toISOString(),
       endDate:   endUTC.toISOString(),
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tickets = result.tickets as any[];
 
     const workbook   = new ExcelJS.Workbook();
     workbook.creator = "SIS Portal";
     workbook.created = new Date();
 
-    const sheetName = `Support ${monthLabel} ${targetYear}`;
-    const sheet     = workbook.addWorksheet(sheetName);
+    const sheet = workbook.addWorksheet(`Support ${periodLabel}`);
 
-    // Kolom SAMA seperti sebelumnya — "Attachment" tetap ada, sekarang jadi hyperlink
     sheet.columns = [
       { header: "Reporter Information",      key: "reporter",    width: 28 },
       { header: "Divisi / Unit Kerja",       key: "divisi",      width: 22 },
@@ -100,12 +133,11 @@ export async function GET(req: NextRequest) {
       { header: "Jumlah Barang",             key: "jumlah",      width: 14 },
       { header: "Keluhan Kerusakan",         key: "keluhan",     width: 38 },
       { header: "Assign Team",               key: "assignee",    width: 32 },
-      { header: "Tindak Lanjut",             key: "timeline",    width: 55 },
-      { header: "Attachment",                key: "attachment",  width: 45 },
+      { header: "Summary",                   key: "summary",     width: 55 },
+      { header: "Attachment",               key: "attachment",  width: 45 },
       { header: "Status Pengusulan",         key: "status",      width: 22 },
     ];
 
-    // Header style — SAMA seperti sebelumnya (kuning FFFFF2CC, bold hitam)
     const headerRow = sheet.getRow(1);
     headerRow.eachCell((cell) => {
       cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
@@ -116,13 +148,11 @@ export async function GET(req: NextRequest) {
     headerRow.height = 32;
 
     const STATUS_MAP: Record<string, string> = {
-      OPEN:     "Open",
-      PENDING:  "Pending",
-      DONE:     "Done (Sudah Selesai)",
-      REJECT:   "Reject",
-      RESOLVED: "Resolved",
+      OPEN: "Open", PENDING: "Pending", DONE: "Done (Sudah Selesai)",
+      REJECT: "Reject", RESOLVED: "Resolved",
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tickets.forEach((t: any, idx: number) => {
       let ff: Record<string, unknown> = {};
       if (typeof t.form_fields === "string") {
@@ -137,6 +167,7 @@ export async function GET(req: NextRequest) {
       });
 
       const attachmentUrl = getAttachmentUrl(ff, t.evidence_attachment);
+      const summaryValue  = (t.summary_ticket || "").trim() || "—";
 
       const row = sheet.addRow({
         reporter:    getField(ff, "Reporter Information", "Name", "Nama"),
@@ -151,12 +182,11 @@ export async function GET(req: NextRequest) {
         jumlah:      getField(ff, "Jumlah Barang", "Quantity"),
         keluhan:     getField(ff, "Issue", "Keluhan", "Masalah", "Problem"),
         assignee:    formatAssignee(t.assignee),
-        timeline:    (t.timeline_tindak_lanjut || "—").trim(),
+        summary:     summaryValue,
         attachment:  attachmentUrl ? "Lihat Attachment" : "—",
         status:      STATUS_MAP[t.status_pengusulan] || t.status_pengusulan,
       });
 
-      // Zebra + border SAMA seperti sebelumnya
       const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
       row.eachCell((cell) => {
         cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
@@ -166,10 +196,8 @@ export async function GET(req: NextRequest) {
       });
       row.height = 60;
 
-      // Set hyperlink pada kolom Attachment (kolom ke-14, index 14)
       if (attachmentUrl) {
-        const attachCol = 14; // kolom N (1-based)
-        const attachCell = row.getCell(attachCol);
+        const attachCell = row.getCell(14);
         attachCell.value = { text: "Lihat Attachment", hyperlink: attachmentUrl };
         attachCell.font  = { size: 10, color: { argb: "FF0563C1" }, underline: true };
       }
@@ -178,11 +206,10 @@ export async function GET(req: NextRequest) {
     sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } };
     sheet.views = [{ state: "frozen", ySplit: 1 }];
 
-    const buffer     = await workbook.xlsx.writeBuffer();
-    const fileName   = `Laporan_Support_${monthLabel}_${targetYear}.xlsx`;
-    const uint8Array = new Uint8Array(buffer);
+    const buffer   = await workbook.xlsx.writeBuffer();
+    const fileName = `Laporan_Support_${periodLabel.replace(/[\s/–]/g, "_")}.xlsx`;
 
-    return new NextResponse(uint8Array, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -190,8 +217,9 @@ export async function GET(req: NextRequest) {
         "Cache-Control":       "no-store",
       },
     });
-  } catch (err: any) {
-    console.error("[EXPORT SUPPORT]", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[EXPORT SUPPORT]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

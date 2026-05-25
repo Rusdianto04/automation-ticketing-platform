@@ -30,7 +30,6 @@ function formatAssignee(assignee: unknown): string {
     .filter(Boolean).join(", ") || "—";
 }
 
-// Ambil URL attachment dari form_fields["Attachment"] atau evidence_attachment
 function getAttachmentUrl(ff: Record<string, unknown>, evidence: unknown): string | null {
   if (ff["Attachment"] && typeof ff["Attachment"] === "string" && ff["Attachment"].trim()) {
     return ff["Attachment"].trim();
@@ -55,36 +54,71 @@ const borderAll: Partial<ExcelJS.Borders> = {
   right:  { style: "thin", color: { argb: "FF000000" } },
 };
 
+const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
 export async function GET(req: NextRequest) {
   try {
-    const url   = new URL(req.url);
-    const month = parseInt(url.searchParams.get("month") || "0", 10);
-    const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+    const url       = new URL(req.url);
+    const rangeMode = url.searchParams.get("rangeMode");
+    const now       = new Date();
 
-    const now         = new Date();
-    const targetMonth = month > 0 ? month : now.getMonth() + 1;
-    const targetYear  = year  > 0 ? year  : now.getFullYear();
+    let startUTC: Date;
+    let endUTC: Date;
+    let periodLabel: string;
 
-    const startUTC = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
-    const endUTC   = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
+    if (rangeMode === "range") {
+      const sd = parseInt(url.searchParams.get("startDay")   || "1", 10);
+      const sm = parseInt(url.searchParams.get("startMonth") || "0", 10);
+      const sy = parseInt(url.searchParams.get("startYear")  || "0", 10);
+      const ed = parseInt(url.searchParams.get("endDay")     || "1", 10);
+      const em = parseInt(url.searchParams.get("endMonth")   || "0", 10);
+      const ey = parseInt(url.searchParams.get("endYear")    || "0", 10);
 
-    const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-    const monthLabel = MONTHS_ID[targetMonth] || `Bulan${targetMonth}`;
+      const startDay   = sd > 0 ? sd : 1;
+      const startMonth = sm > 0 ? sm : now.getMonth() + 1;
+      const startYear  = sy > 0 ? sy : now.getFullYear();
+      const endDay     = ed > 0 ? ed : now.getDate();
+      const endMonth   = em > 0 ? em : now.getMonth() + 1;
+      const endYear    = ey > 0 ? ey : now.getFullYear();
 
-    const result = await apiExportTickets("incident", {
+      startUTC = new Date(Date.UTC(startYear, startMonth - 1, startDay,    0, 0, 0) - 7 * 3600 * 1000);
+      endUTC   = new Date(Date.UTC(endYear,   endMonth - 1,   endDay + 1,  0, 0, 0) - 7 * 3600 * 1000);
+
+      const slabel = MONTHS_ID[startMonth] || `Bulan${startMonth}`;
+      const elabel = MONTHS_ID[endMonth]   || `Bulan${endMonth}`;
+
+      if (startYear === endYear && startMonth === endMonth && startDay === endDay) {
+        periodLabel = `${startDay} ${slabel} ${startYear}`;
+      } else if (startYear === endYear && startMonth === endMonth) {
+        periodLabel = `${startDay}–${endDay} ${slabel} ${startYear}`;
+      } else if (startYear === endYear) {
+        periodLabel = `${startDay} ${slabel} – ${endDay} ${elabel} ${startYear}`;
+      } else {
+        periodLabel = `${startDay} ${slabel} ${startYear} – ${endDay} ${elabel} ${endYear}`;
+      }
+    } else {
+      const month = parseInt(url.searchParams.get("month") || "0", 10);
+      const year  = parseInt(url.searchParams.get("year")  || "0", 10);
+      const targetMonth = month > 0 ? month : now.getMonth() + 1;
+      const targetYear  = year  > 0 ? year  : now.getFullYear();
+      startUTC    = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0) - 7 * 3600 * 1000);
+      endUTC      = new Date(Date.UTC(targetYear, targetMonth,     1, 0, 0, 0) - 7 * 3600 * 1000);
+      periodLabel = `${MONTHS_ID[targetMonth] || `Bulan${targetMonth}`} ${targetYear}`;
+    }
+
+    const result  = await apiExportTickets("incident", {
       startDate: startUTC.toISOString(),
       endDate:   endUTC.toISOString(),
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tickets = result.tickets as any[];
 
     const workbook   = new ExcelJS.Workbook();
     workbook.creator = "SIS Portal";
     workbook.created = new Date();
 
-    const sheetName = `Incident ${monthLabel} ${targetYear}`;
-    const sheet     = workbook.addWorksheet(sheetName);
+    const sheet = workbook.addWorksheet(`Incident ${periodLabel}`);
 
-    // Kolom SAMA seperti sebelumnya
     sheet.columns = [
       { header: "Title",               key: "title",    width: 38 },
       { header: "Date/Time",           key: "datetime", width: 24 },
@@ -99,7 +133,6 @@ export async function GET(req: NextRequest) {
       { header: "Status",              key: "status",   width: 32 },
     ];
 
-    // Header style — SAMA seperti sebelumnya (kuning FFFFF2CC, bold hitam)
     const headerRow = sheet.getRow(1);
     headerRow.eachCell((cell) => {
       cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
@@ -109,6 +142,7 @@ export async function GET(req: NextRequest) {
     });
     headerRow.height = 32;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tickets.forEach((t: any, idx: number) => {
       let ff: Record<string, unknown> = {};
       if (typeof t.form_fields === "string") {
@@ -119,7 +153,6 @@ export async function GET(req: NextRequest) {
 
       const createdAt = new Date(t.created_at);
 
-      // Support field "Date & Time Incident" dari static form
       const dateTimeField = getField(ff, "Date & Time Incident");
       const dateIncident  = getField(ff, "Date Incident", "Tanggal Incident", "Date");
       const timeIncident  = getField(ff, "Time Incident", "Waktu Incident", "Time");
@@ -139,17 +172,17 @@ export async function GET(req: NextRequest) {
       let statusStr = STATUS_MAP[t.status_pengusulan] || t.status_pengusulan;
 
       if (t.resolved_at && (t.status_pengusulan === "RESOLVED" || t.status_pengusulan === "DONE")) {
-        const resolvedAt = new Date(t.resolved_at);
-        const diffMs     = resolvedAt.getTime() - createdAt.getTime();
-        const diffHours  = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMins   = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const resolvedAt  = new Date(t.resolved_at);
+        const diffMs      = resolvedAt.getTime() - createdAt.getTime();
+        const diffHours   = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMins    = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
         const resolvedStr = resolvedAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" });
         statusStr = `Resolved (${resolvedStr} - ${diffHours > 0 ? `${diffHours} Hour${diffHours > 1 ? "s" : ""} ` : ""}${diffMins} Minutes)`;
       }
 
       const title = getField(ff, "Incident Title", "Incident Information", "Title") !== "—"
         ? getField(ff, "Incident Title", "Incident Information", "Title")
-        : t.summary_ticket?.split(".")[0]?.trim() || "Incident Report";
+        : (t.summary_ticket as string | undefined)?.split(".")[0]?.trim() || "Incident Report";
 
       const attachmentUrl = getAttachmentUrl(ff, t.evidence_attachment);
 
@@ -160,14 +193,13 @@ export async function GET(req: NextRequest) {
         severity: getField(ff, "Severity Incident", "Severity"),
         area:     getField(ff, "Suspect Area", "Area", "Lokasi"),
         assignee: formatAssignee(t.assignee),
-        action:   (t.timeline_action_taken || t.timeline_tindak_lanjut || "—").trim(),
+        action:   ((t.timeline_action_taken || t.timeline_tindak_lanjut || "—") as string).trim(),
         issue:    getField(ff, "Indicated Issue", "Issue", "Masalah"),
-        handling: t.summary_ticket || "—",
+        handling: (t.summary_ticket as string | undefined) || "—",
         evidence: attachmentUrl ? "Lihat Attachment" : "—",
         status:   statusStr,
       });
 
-      // Zebra + border SAMA seperti sebelumnya
       const bgColor = idx % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF";
       row.eachCell((cell) => {
         cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
@@ -177,10 +209,8 @@ export async function GET(req: NextRequest) {
       });
       row.height = 60;
 
-      // Set hyperlink pada kolom Evidence Attachment (kolom ke-10)
       if (attachmentUrl) {
-        const evidenceCol  = 10; // kolom J (1-based)
-        const evidenceCell = row.getCell(evidenceCol);
+        const evidenceCell = row.getCell(10);
         evidenceCell.value = { text: "Lihat Attachment", hyperlink: attachmentUrl };
         evidenceCell.font  = { size: 10, color: { argb: "FF0563C1" }, underline: true };
       }
@@ -189,11 +219,10 @@ export async function GET(req: NextRequest) {
     sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } };
     sheet.views = [{ state: "frozen", ySplit: 1 }];
 
-    const buffer     = await workbook.xlsx.writeBuffer();
-    const fileName   = `Laporan_Incident_${monthLabel}_${targetYear}.xlsx`;
-    const uint8Array = new Uint8Array(buffer);
+    const buffer   = await workbook.xlsx.writeBuffer();
+    const fileName = `Laporan_Incident_${periodLabel.replace(/[\s/–]/g, "_")}.xlsx`;
 
-    return new NextResponse(uint8Array, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -201,8 +230,9 @@ export async function GET(req: NextRequest) {
         "Cache-Control":       "no-store",
       },
     });
-  } catch (err: any) {
-    console.error("[EXPORT INCIDENT]", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[EXPORT INCIDENT]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

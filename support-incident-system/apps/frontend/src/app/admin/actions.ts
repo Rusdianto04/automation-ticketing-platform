@@ -162,3 +162,74 @@ export async function adminUpdateFormFieldsAction(
     return { error: String(err) };
   }
 }
+
+// ── Manual Update Summary / Root Cause / Timeline (Backup n8n) ────────────────
+export async function adminUpdateSummaryDataAction(
+  ticketId: number,
+  data: {
+    summary_ticket?: string;
+    root_cause?: string;
+    timeline?: string;
+    ticketType?: string;
+  }
+) {
+  const session = await getAdminSessionAction();
+  if (!session) return { error: "Unauthorized" };
+
+  const backendUrl =
+    process.env.BACKEND_SELF_URL ||
+    process.env.BACKEND_URL ||
+    "http://backend:3000";
+  const apiKey = process.env.N8N_API_KEY || "automation_ticketing01_incident02";
+
+  try {
+    // 1. Update summary/rootCause via POST /api/ticket/summary (existing endpoint)
+    if (data.summary_ticket !== undefined || data.root_cause !== undefined) {
+      const summaryBody: Record<string, unknown> = {
+        ticketId,
+        generatedBy: "admin_manual",
+      };
+      if (data.summary_ticket !== undefined) summaryBody.summaryText = data.summary_ticket;
+      if (data.root_cause     !== undefined) summaryBody.rootCause   = data.root_cause;
+
+      const res = await fetch(`${backendUrl}/api/ticket/summary`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body:    JSON.stringify(summaryBody),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Gagal update summary");
+      }
+    }
+
+    // 2. Update timeline via POST /api/ticket/timeline/append (existing endpoint)
+    if (data.timeline !== undefined && data.timeline.trim()) {
+      const timelineBody = {
+        ticketId,
+        entry: data.timeline,
+        type:  data.ticketType || "TICKETING",
+      };
+      const res = await fetch(`${backendUrl}/api/ticket/timeline/append`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body:    JSON.stringify(timelineBody),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Gagal update timeline");
+      }
+    }
+
+    // 3. Discord sync di background (pinned message update)
+    syncToDiscordAsync(ticketId, "summary_update", {
+      summary_ticket: data.summary_ticket,
+      root_cause:     data.root_cause,
+      timeline:       data.timeline,
+    });
+
+    return { success: true };
+  } catch (err) {
+    return { error: String(err) };
+  }
+}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Save, UserCheck, RefreshCw, CheckCircle2,
   XCircle, Clock, Pencil, X, ExternalLink, FileText,
-  Paperclip, Image as ImageIcon,
+  Paperclip, Image as ImageIcon, AlertTriangle,
 } from "lucide-react";
 import {
   adminUpdateStatusAction,
@@ -21,46 +21,42 @@ interface Activity {
   created_at: string;
 }
 
-// ── Interface: item similarTickets (diperluas v11) ────────────────────────────
 interface SimilarTicketItem {
   ticketId:       number;
   title:          string;
-  summaryPreview: string | null;   // preview singkat untuk accordion header
+  summaryPreview: string | null;
   summary:        string | null;
   rootCause:      string | null;
-  timeline:       string | null;   // ✅ FIX: tambah timeline
+  timeline:       string | null;
   resolvedAt:     string | null;
-  threadUrl:      string | null;   // ✅ FIX: tambah threadUrl
+  threadUrl:      string | null;
 }
 
-// ── Interface: runbook item (diperluas v11) ───────────────────────────────────
 interface RunbookItem {
   title:          string;
   category:       string;
-  contentPreview: string | null;   // preview singkat untuk accordion header
+  contentPreview: string | null;
   content:        string;
   successRate:    number;
 }
 
-// ── Interface: topSuggestion (diperluas v11) ──────────────────────────────────
 interface TopSuggestion {
-  source:    string;
-  ticketId?: number;
-  title?:    string;
-  summary?:  string;
+  source:     string;
+  ticketId?:  number;
+  title?:     string;
+  summary?:   string;
   rootCause?: string;
-  timeline?:  string;   // ✅ FIX: tambah timeline
-  content?:  string;
-  threadUrl?: string;   // ✅ FIX: tambah threadUrl
+  timeline?:  string;
+  content?:   string;
+  threadUrl?: string;
 }
 
-// ── Interface: recommendation (diperluas v11) ─────────────────────────────────
 interface Recommendation {
   found:          boolean;
   isIncident:     boolean;
   label:          string;
-  totalSimilar:   number;          // ✅ FIX: tambah totalSimilar
-  totalRunbooks:  number;          // ✅ FIX: tambah totalRunbooks
+  totalSimilar:   number;
+  totalRunbooks:  number;
   similarTickets: SimilarTicketItem[];
   runbooks:       RunbookItem[];
   topSuggestion:  TopSuggestion | null;
@@ -85,7 +81,6 @@ interface TicketDetail {
   activities: Activity[];
   recommendation?: Recommendation | null;
 }
-
 
 const STATUS_OPTIONS_SUPPORT  = ["OPEN", "PENDING", "DONE", "REJECT"] as const;
 const STATUS_OPTIONS_INCIDENT = ["OPEN", "INVESTIGASI", "MITIGASI", "RESOLVED"] as const;
@@ -140,7 +135,6 @@ function normalizeStatusForUI(rawStatus: string, isIncident: boolean): string {
 
 function formatActivityDescription(description: string, type: string): string {
   if (!description) return type;
-
   let d = description;
   d = d.replace(/peppermint[_ ]portal/gi, "Portal");
   d = d.replace(/Tiket dibuat dari Portal/gi, "Ticket dibuat melalui Portal Users");
@@ -155,6 +149,7 @@ function formatActivityDescription(description: string, type: string): string {
 export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDetail }) {
   const isIncident    = ticket.type === "INCIDENT";
   const statusOptions = isIncident ? STATUS_OPTIONS_INCIDENT : STATUS_OPTIONS_SUPPORT;
+  const doneStatus    = isIncident ? "RESOLVED" : "DONE";
 
   const [status, setStatus] = useState(() =>
     normalizeStatusForUI(ticket.status, isIncident)
@@ -173,15 +168,63 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     )
   );
 
+  // ── Summary / Root Cause / Timeline ──────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const timelineData = ((ticket as any).timeline_action_taken || (ticket as any).timeline_tindak_lanjut || "") as string;
+
+  const [summaryValue,   setSummaryValue]   = useState(ticket.summary_ticket || "");
+  const [rootCauseValue, setRootCauseValue] = useState(ticket.root_cause || "");
+  const [timelineValue,  setTimelineValue]  = useState(timelineData || "");
+
+  const [editingSummary,   setEditingSummary]   = useState(false);
+  const [editingRootCause, setEditingRootCause] = useState(false);
+  const [editingTimeline,  setEditingTimeline]  = useState(false);
+
+  // ── KUNCI LOGIKA BARU ─────────────────────────────────────────────────────
+  // `doneSelected` = true ketika admin mengklik tombol DONE atau RESOLVED.
+  // Card langsung merah saat ini. Tombol Simpan Status disabled jika belum komplit.
+  // Reset ke false jika admin memilih status lain.
+  const [doneSelected, setDoneSelected] = useState(false);
+
   const [message,   setMessage]   = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const showMsg = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
-    if (type === "success") setTimeout(() => setMessage(null), 3000);
+    if (type === "success") setTimeout(() => setMessage(null), 3500);
+  };
+
+  const summaryFilled    = summaryValue.trim().length > 0;
+  const rootCauseFilled  = rootCauseValue.trim().length > 0;
+  const timelineFilled   = timelineValue.trim().length > 0;
+  const allRequiredFilled = summaryFilled && rootCauseFilled && timelineFilled;
+
+  // Card merah aktif saat: tombol Done/Resolved sudah diklik DAN field masih kosong
+  const showSummaryError   = doneSelected && !summaryFilled;
+  const showRootCauseError = doneSelected && !rootCauseFilled;
+  const showTimelineError  = doneSelected && !timelineFilled;
+
+  // Tombol Simpan Status disabled jika: Done dipilih tapi belum semua field terisi
+  const saveDisabled = isPending || (doneSelected && !allRequiredFilled);
+
+  // Handler klik tombol status
+  const handleSetStatus = (s: string) => {
+    setStatus(s);
+    if (s === doneStatus) {
+      // Aktifkan mode doneSelected → card langsung merah jika kosong
+      setDoneSelected(true);
+      // Scroll halus ke area card jika ada yang kosong
+      if (!allRequiredFilled) {
+        setTimeout(() => window.scrollTo({ top: 350, behavior: "smooth" }), 50);
+      }
+    } else {
+      // Pilih status lain → reset, card kembali normal
+      setDoneSelected(false);
+    }
   };
 
   const handleUpdateStatus = () => {
+    if (saveDisabled) return;
     startTransition(async () => {
       const statusToSave = (!isIncident && status === "OPEN") ? "APPROVED" : status;
       const result = await adminUpdateStatusAction(
@@ -201,7 +244,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
   const badgeColorClass = STATUS_COLORS[rawStatus] || "bg-slate-100 text-slate-600 border-slate-200";
 
   const handleReassign = () => {
-    const assignees: string[] = assigneeInput.split(",").map((s) => s.trim()).filter(Boolean);
+    const assignees = assigneeInput.split(",").map((s) => s.trim()).filter(Boolean);
     startTransition(async () => {
       const result = await adminReassignAction(ticket.id, assignees);
       if (result?.error) showMsg("error", result.error);
@@ -225,17 +268,10 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
     });
   };
 
-  const reportUrl      = ticket.report_url || "";
-  const attachmentUrl  = (ticket.form_fields["Attachment"] as string) || "";
-  const isImageUrl     = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
-
+  const reportUrl     = ticket.report_url || "";
+  const attachmentUrl = (ticket.form_fields["Attachment"] as string) || "";
+  const isImageUrl    = attachmentUrl && /\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(attachmentUrl);
   const displayFormFields = Object.entries(formEdits).filter(([k]) => k !== "Attachment");
-
-  const timelineKey  = isIncident ? "timeline_action_taken" : "timeline_tindak_lanjut";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const timelineData = (ticket as any)[timelineKey] || "";
-
-  // ── Recommendation data (typed) ───────────────────────────────────────────
   const rec = ticket.recommendation;
 
   return (
@@ -244,12 +280,9 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <Link
-            href="/admin/tickets"
-            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-[13px] font-medium transition-colors"
-          >
-            <ArrowLeft size={15} />
-            Kembali
+          <Link href="/admin/tickets"
+            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-[13px] font-medium transition-colors">
+            <ArrowLeft size={15} /> Kembali
           </Link>
           <span className="text-slate-300">|</span>
           <div>
@@ -258,9 +291,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
           </div>
           <div className="ml-auto flex items-center gap-2">
             <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-              isIncident
-                ? "bg-rose-50 text-rose-700 border-rose-200"
-                : "bg-indigo-50 text-indigo-700 border-indigo-200"
+              isIncident ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"
             }`}>
               {isIncident ? "🚨 Incident" : "🎫 Support"}
             </span>
@@ -290,14 +321,13 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
           {/* ── LEFT ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Data Ticket (editable) */}
+            {/* Data Ticket */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between">
                 <span>📋 Data Ticket</span>
                 <button
                   onClick={() => { if (editingTicket) setRequesterEdit(ticket.requester); setEditingTicket((v) => !v); }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors"
-                >
+                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors">
                   {editingTicket ? <X size={12} /> : <Pencil size={12} />}
                   {editingTicket ? "Batal" : "Edit"}
                 </button>
@@ -308,11 +338,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                     <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">Reporter</th>
                     <td className="px-4 py-2.5 text-slate-700">
                       {editingTicket ? (
-                        <input
-                          value={requesterEdit}
-                          onChange={(e) => setRequesterEdit(e.target.value)}
-                          className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500"
-                        />
+                        <input value={requesterEdit} onChange={(e) => setRequesterEdit(e.target.value)}
+                          className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500" />
                       ) : (requesterEdit || ticket.requester)}
                     </td>
                   </tr>
@@ -334,11 +361,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               </table>
               {editingTicket && (
                 <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-                  <button
-                    onClick={handleSaveTicketData}
-                    disabled={isPending}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-[12px] font-bold transition-colors"
-                  >
+                  <button onClick={handleSaveTicketData} disabled={isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-[12px] font-bold transition-colors">
                     {isPending ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
                     Simpan Data Ticket
                   </button>
@@ -346,7 +370,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
               )}
             </div>
 
-            {/* Data Formulir (editable) */}
+            {/* Data Formulir */}
             {displayFormFields.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between">
@@ -354,19 +378,13 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                   <button
                     onClick={() => {
                       if (editingForm) {
-                        setFormEdits(
-                          Object.fromEntries(
-                            Object.entries(ticket.form_fields).map(([k, v]) => [
-                              k,
-                              Array.isArray(v) ? (v as string[]).join(", ") : (v || ""),
-                            ])
-                          )
-                        );
+                        setFormEdits(Object.fromEntries(
+                          Object.entries(ticket.form_fields).map(([k, v]) => [k, Array.isArray(v) ? (v as string[]).join(", ") : (v || "")])
+                        ));
                       }
                       setEditingForm((v) => !v);
                     }}
-                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors"
-                  >
+                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors">
                     {editingForm ? <X size={12} /> : <Pencil size={12} />}
                     {editingForm ? "Batal" : "Edit"}
                   </button>
@@ -378,11 +396,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                         <th className="px-4 py-2.5 text-left bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase w-2/5">{k}</th>
                         <td className="px-4 py-2.5 text-slate-700">
                           {editingForm ? (
-                            <input
-                              value={v}
-                              onChange={(e) => setFormEdits((prev) => ({ ...prev, [k]: e.target.value }))}
-                              className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500"
-                            />
+                            <input value={v} onChange={(e) => setFormEdits((prev) => ({ ...prev, [k]: e.target.value }))}
+                              className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-[13px] focus:outline-none focus:border-indigo-500" />
                           ) : (v || "—")}
                         </td>
                       </tr>
@@ -391,11 +406,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                 </table>
                 {editingForm && (
                   <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-                    <button
-                      onClick={handleSaveFormFields}
-                      disabled={isPending}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-[12px] font-bold transition-colors"
-                    >
+                    <button onClick={handleSaveFormFields} disabled={isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-[12px] font-bold transition-colors">
                       {isPending ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
                       Simpan Data Formulir
                     </button>
@@ -408,67 +420,84 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
             {attachmentUrl && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-700 text-slate-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
-                  <Paperclip size={13} />
-                  Attachment / Lampiran
+                  <Paperclip size={13} /> Attachment / Lampiran
                 </div>
                 <div className="p-4 space-y-3">
                   {isImageUrl ? (
                     <div className="space-y-3">
-                      <img
-                        src={attachmentUrl}
-                        alt="Attachment"
+                      <img src={attachmentUrl} alt="Attachment"
                         className="max-w-full rounded-lg border border-slate-200 shadow-sm"
-                        style={{ maxHeight: "320px", objectFit: "contain" }}
-                      />
-                      <a
-                        href={attachmentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[12px] font-medium transition-colors"
-                      >
-                        <ImageIcon size={13} />
-                        Buka Gambar di Tab Baru ↗
+                        style={{ maxHeight: "320px", objectFit: "contain" }} />
+                      <a href={attachmentUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[12px] font-medium transition-colors">
+                        <ImageIcon size={13} /> Buka Gambar di Tab Baru ↗
                       </a>
                     </div>
                   ) : (
-                    <a
-                      href={attachmentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[13px] font-medium transition-colors"
-                    >
-                      <ExternalLink size={13} />
-                      Buka Attachment ↗
+                    <a href={attachmentUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[13px] font-medium transition-colors">
+                      <ExternalLink size={13} /> Buka Attachment ↗
                     </a>
                   )}
-                  <p className="text-[11px] text-slate-400">
-                    ℹ️ Attachment dapat diakses dari jaringan internal.
-                  </p>
+                  <p className="text-[11px] text-slate-400">ℹ️ Attachment dapat diakses dari jaringan internal.</p>
                 </div>
               </div>
             )}
 
-            {/* Summary AI */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
-                📄 Ringkasan AI (Summary)
+            {/* ── Summary AI ── merah saat Done dipilih + kosong ── */}
+            <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
+              showSummaryError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"
+            }`}>
+              <div className={`px-4 py-3 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between transition-colors duration-200 ${
+                showSummaryError ? "bg-red-600 text-white" : "bg-slate-800 text-slate-100"
+              }`}>
+                <span className="flex items-center gap-2">
+                  📄 Ringkasan AI (Summary)
+                  {showSummaryError && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-full">
+                      <AlertTriangle size={10} /> Wajib diisi sebelum {doneStatus}
+                    </span>
+                  )}
+                </span>
+                <button onClick={() => setEditingSummary((v) => !v)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors">
+                  {editingSummary ? <X size={12} /> : <Pencil size={12} />}
+                  {editingSummary ? "Batal" : "Edit"}
+                </button>
               </div>
-              {ticket.summary_ticket ? (
+              {editingSummary ? (
+                <div className="p-4 space-y-3">
+                  <textarea value={summaryValue} onChange={(e) => setSummaryValue(e.target.value)} rows={5}
+                    placeholder="Isi ringkasan / summary tiket ini..."
+                    className={`w-full px-3 py-2.5 border rounded-lg text-[13px] text-slate-700 focus:outline-none resize-y ${
+                      showSummaryError ? "border-red-300 focus:border-red-500" : "border-indigo-300 focus:border-indigo-500"
+                    }`} />
+                  <div className="flex justify-end">
+                    <button onClick={() => setEditingSummary(false)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[12px] font-bold transition-colors">
+                      <Save size={13} /> Simpan
+                    </button>
+                  </div>
+                </div>
+              ) : summaryValue ? (
                 <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap bg-indigo-50 border-l-4 border-l-indigo-400 m-4 rounded-r-lg">
-                  {ticket.summary_ticket}
+                  {summaryValue}
                 </div>
               ) : (
-                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
-                  Ringkasan AI belum tersedia. Akan diisi otomatis setelah klasifikasi AI.
+                <div className={`px-4 py-4 text-[13px] italic flex items-center gap-2 ${
+                  showSummaryError ? "text-red-600 bg-red-50/50" : "text-slate-400"
+                }`}>
+                  <AlertTriangle size={14} className={showSummaryError ? "text-red-500" : "text-amber-400"} />
+                  {showSummaryError
+                    ? <span>Belum diisi — klik <strong>Edit</strong> di atas untuk mengisi sekarang.</span>
+                    : "Ringkasan AI belum tersedia. Klik Edit untuk mengisi secara manual."}
                 </div>
               )}
             </div>
 
-            {/* ── Smart Recommendation (Teknisi) — Compact Accordion ── */}
+            {/* ── Smart Recommendation ── */}
             {rec && rec.found && (
               <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
-
-                {/* Header */}
                 <div className="px-4 py-3 bg-emerald-700 text-white text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
                   💡 Smart Recommendation
                   <span className="ml-2 text-[10px] font-normal bg-emerald-600 px-2 py-0.5 rounded-full">
@@ -478,35 +507,24 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                     {rec.isIncident ? "Referensi Mitigasi Insiden" : "Referensi Solusi Teknisi"}
                   </span>
                 </div>
-
                 <div className="p-4 space-y-3">
-
-                  {/* Label */}
                   <p className="text-[12px] text-emerald-700 font-medium border-l-4 border-emerald-400 pl-3 bg-emerald-50 py-2 rounded-r">
                     {rec.label}
                   </p>
-
-                  {/* ── Top Suggestion: Highlight Utama ── */}
                   {rec.topSuggestion && (
                     <div className="rounded-lg border border-emerald-300 overflow-hidden">
                       <div className="px-3 py-2 bg-emerald-600 text-white text-[11px] font-bold uppercase tracking-wide flex items-center gap-2">
                         🏆 Referensi Terbaik
                         {rec.topSuggestion.source === "ticket" && rec.topSuggestion.ticketId && (
-                          <span className="ml-auto font-normal text-emerald-200">
-                            #{rec.topSuggestion.ticketId}
-                          </span>
+                          <span className="ml-auto font-normal text-emerald-200">#{rec.topSuggestion.ticketId}</span>
                         )}
                       </div>
                       <div className="p-3 space-y-2 bg-emerald-50 text-[12px]">
-                        <p className="font-semibold text-slate-700 truncate">
-                          {rec.topSuggestion.title}
-                        </p>
+                        <p className="font-semibold text-slate-700 truncate">{rec.topSuggestion.title}</p>
                         {rec.topSuggestion.summary && (
                           <div className="border-l-2 border-emerald-400 pl-2">
                             <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">✅ Solusi</p>
-                            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                              {rec.topSuggestion.summary}
-                            </p>
+                            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{rec.topSuggestion.summary}</p>
                           </div>
                         )}
                         {rec.topSuggestion.rootCause && (
@@ -522,20 +540,14 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                           </div>
                         )}
                         {rec.topSuggestion.threadUrl && (
-                          <a
-                            href={rec.topSuggestion.threadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline mt-1"
-                          >
+                          <a href={rec.topSuggestion.threadUrl} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline mt-1">
                             🔗 Lihat thread Discord referensi
                           </a>
                         )}
                       </div>
                     </div>
                   )}
-
-                  {/* ── Kasus Serupa Lainnya — Accordion ── */}
                   {rec.similarTickets.length > 0 && (
                     <details className="group">
                       <summary className="cursor-pointer list-none">
@@ -551,66 +563,27 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                             <summary className="cursor-pointer list-none">
                               <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition select-none">
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[12px] font-semibold text-slate-700">
-                                    #{t.ticketId} —{" "}
-                                  </span>
-                                  <span className="text-[12px] text-slate-600 truncate">
-                                    {t.title}
-                                  </span>
+                                  <span className="text-[12px] font-semibold text-slate-700">#{t.ticketId} — </span>
+                                  <span className="text-[12px] text-slate-600 truncate">{t.title}</span>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
-                                  {t.resolvedAt && (
-                                    <span className="text-[10px] text-slate-400">
-                                      {new Date(t.resolvedAt).toLocaleDateString("id-ID")}
-                                    </span>
-                                  )}
-                                  {t.summaryPreview && (
-                                    <span className="hidden sm:block text-[10px] text-slate-400 italic max-w-[200px] truncate">
-                                      {t.summaryPreview}
-                                    </span>
-                                  )}
+                                  {t.resolvedAt && <span className="text-[10px] text-slate-400">{new Date(t.resolvedAt).toLocaleDateString("id-ID")}</span>}
                                   <span className="text-[10px] text-slate-400 group-open/item:hidden">▼</span>
                                   <span className="text-[10px] text-slate-400 hidden group-open/item:block">▲</span>
                                 </div>
                               </div>
                             </summary>
                             <div className="px-3 pb-3 pt-2 bg-white space-y-2 text-[12px]">
-                              {t.summary && (
-                                <div className="border-l-2 border-emerald-400 pl-2">
-                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">✅ Solusi</p>
-                                  <p className="text-slate-600 whitespace-pre-wrap">{t.summary}</p>
-                                </div>
-                              )}
-                              {t.rootCause && (
-                                <div className="border-l-2 border-amber-400 pl-2">
-                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">🔍 Root Cause</p>
-                                  <p className="text-slate-600">{t.rootCause}</p>
-                                </div>
-                              )}
-                              {t.timeline && (
-                                <div className="border-l-2 border-blue-400 pl-2">
-                                  <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">📅 Action Steps</p>
-                                  <p className="text-slate-600 whitespace-pre-wrap">{t.timeline}</p>
-                                </div>
-                              )}
-                              {t.threadUrl && (
-                                <a
-                                  href={t.threadUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline"
-                                >
-                                  🔗 Lihat thread Discord
-                                </a>
-                              )}
+                              {t.summary && <div className="border-l-2 border-emerald-400 pl-2"><p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">✅ Solusi</p><p className="text-slate-600 whitespace-pre-wrap">{t.summary}</p></div>}
+                              {t.rootCause && <div className="border-l-2 border-amber-400 pl-2"><p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">🔍 Root Cause</p><p className="text-slate-600">{t.rootCause}</p></div>}
+                              {t.timeline && <div className="border-l-2 border-blue-400 pl-2"><p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">📅 Action Steps</p><p className="text-slate-600 whitespace-pre-wrap">{t.timeline}</p></div>}
+                              {t.threadUrl && <a href={t.threadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 underline">🔗 Lihat thread Discord</a>}
                             </div>
                           </details>
                         ))}
                       </div>
                     </details>
                   )}
-
-                  {/* ── Runbooks — Accordion ── */}
                   {rec.runbooks.length > 0 && (
                     <details className="group">
                       <summary className="cursor-pointer list-none">
@@ -625,14 +598,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                           <details key={i} className="group/rb rounded-lg border border-blue-200 overflow-hidden">
                             <summary className="cursor-pointer list-none">
                               <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 transition select-none">
-                                <span className="text-[12px] font-semibold text-blue-700 flex-1 truncate">
-                                  [{r.category}] {r.title}
-                                </span>
-                                {r.successRate > 0 && (
-                                  <span className="text-[10px] text-blue-500 flex-shrink-0">
-                                    ✅ {r.successRate}%
-                                  </span>
-                                )}
+                                <span className="text-[12px] font-semibold text-blue-700 flex-1 truncate">[{r.category}] {r.title}</span>
+                                {r.successRate > 0 && <span className="text-[10px] text-blue-500 flex-shrink-0">✅ {r.successRate}%</span>}
                                 <span className="text-[10px] text-blue-400 group-open/rb:hidden flex-shrink-0">▼</span>
                                 <span className="text-[10px] text-blue-400 hidden group-open/rb:block flex-shrink-0">▲</span>
                               </div>
@@ -645,39 +612,108 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                       </div>
                     </details>
                   )}
-
                 </div>
               </div>
             )}
 
-            {/* Root Cause */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 bg-amber-800 text-amber-100 text-[12px] font-bold uppercase tracking-wider">
-                🔍 Root Cause Analysis
+            {/* ── Root Cause ── merah saat Done dipilih + kosong ── */}
+            <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
+              showRootCauseError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"
+            }`}>
+              <div className={`px-4 py-3 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between transition-colors duration-200 ${
+                showRootCauseError ? "bg-red-600 text-white" : "bg-amber-800 text-amber-100"
+              }`}>
+                <span className="flex items-center gap-2">
+                  🔍 Root Cause Analysis
+                  {showRootCauseError && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-full">
+                      <AlertTriangle size={10} /> Wajib diisi sebelum {doneStatus}
+                    </span>
+                  )}
+                </span>
+                <button onClick={() => setEditingRootCause((v) => !v)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors">
+                  {editingRootCause ? <X size={12} /> : <Pencil size={12} />}
+                  {editingRootCause ? "Batal" : "Edit"}
+                </button>
               </div>
-              {ticket.root_cause ? (
+              {editingRootCause ? (
+                <div className="p-4 space-y-3">
+                  <textarea value={rootCauseValue} onChange={(e) => setRootCauseValue(e.target.value)} rows={4}
+                    placeholder="Isi analisis root cause..."
+                    className={`w-full px-3 py-2.5 border rounded-lg text-[13px] text-slate-700 focus:outline-none resize-y ${
+                      showRootCauseError ? "border-red-300 focus:border-red-500" : "border-amber-300 focus:border-amber-500"
+                    }`} />
+                  <div className="flex justify-end">
+                    <button onClick={() => setEditingRootCause(false)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[12px] font-bold transition-colors">
+                      <Save size={13} /> Simpan
+                    </button>
+                  </div>
+                </div>
+              ) : rootCauseValue ? (
                 <div className="p-4 text-[13px] text-amber-900 leading-relaxed whitespace-pre-wrap bg-amber-50 border-l-4 border-l-amber-400 m-4 rounded-r-lg">
-                  {ticket.root_cause}
+                  {rootCauseValue}
                 </div>
               ) : (
-                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
-                  Root cause belum diisi. Akan diperbarui setelah investigasi.
+                <div className={`px-4 py-4 text-[13px] italic flex items-center gap-2 ${
+                  showRootCauseError ? "text-red-600 bg-red-50/50" : "text-slate-400"
+                }`}>
+                  <AlertTriangle size={14} className={showRootCauseError ? "text-red-500" : "text-amber-400"} />
+                  {showRootCauseError
+                    ? <span>Belum diisi — klik <strong>Edit</strong> di atas untuk mengisi sekarang.</span>
+                    : "Root cause belum diisi. Klik Edit untuk mengisi secara manual."}
                 </div>
               )}
             </div>
 
-            {/* Timeline Progress */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 bg-slate-800 text-slate-100 text-[12px] font-bold uppercase tracking-wider">
-                ⏱️ {isIncident ? "Action Taken / Timeline" : "Timeline Progress / Tindak Lanjut"}
+            {/* ── Timeline Progress ── merah saat Done dipilih + kosong ── */}
+            <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
+              showTimelineError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"
+            }`}>
+              <div className={`px-4 py-3 text-[12px] font-bold uppercase tracking-wider flex items-center justify-between transition-colors duration-200 ${
+                showTimelineError ? "bg-red-600 text-white" : "bg-slate-800 text-slate-100"
+              }`}>
+                <span className="flex items-center gap-2">
+                  ⏱️ {isIncident ? "Action Taken / Timeline" : "Timeline Progress / Tindak Lanjut"}
+                  {showTimelineError && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-full">
+                      <AlertTriangle size={10} /> Wajib diisi sebelum {doneStatus}
+                    </span>
+                  )}
+                </span>
+                <button onClick={() => setEditingTimeline((v) => !v)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-semibold transition-colors">
+                  {editingTimeline ? <X size={12} /> : <Pencil size={12} />}
+                  {editingTimeline ? "Batal" : "Edit"}
+                </button>
               </div>
-              {timelineData ? (
+              {editingTimeline ? (
+                <div className="p-4 space-y-3">
+                  <textarea value={timelineValue} onChange={(e) => setTimelineValue(e.target.value)} rows={5}
+                    placeholder={isIncident ? "Isi action taken / timeline penanganan..." : "Isi timeline progress / tindak lanjut..."}
+                    className={`w-full px-3 py-2.5 border rounded-lg text-[13px] text-slate-700 focus:outline-none resize-y ${
+                      showTimelineError ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-slate-500"
+                    }`} />
+                  <div className="flex justify-end">
+                    <button onClick={() => setEditingTimeline(false)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[12px] font-bold transition-colors">
+                      <Save size={13} /> Simpan
+                    </button>
+                  </div>
+                </div>
+              ) : timelineValue ? (
                 <div className="p-4 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">
-                  {timelineData}
+                  {timelineValue}
                 </div>
               ) : (
-                <div className="px-4 py-4 text-[13px] text-slate-400 italic">
-                  Belum ada progress yang dicatat.
+                <div className={`px-4 py-4 text-[13px] italic flex items-center gap-2 ${
+                  showTimelineError ? "text-red-600 bg-red-50/50" : "text-slate-400"
+                }`}>
+                  <AlertTriangle size={14} className={showTimelineError ? "text-red-500" : "text-amber-400"} />
+                  {showTimelineError
+                    ? <span>Belum diisi — klik <strong>Edit</strong> di atas untuk mengisi sekarang.</span>
+                    : "Belum ada progress yang dicatat. Klik Edit untuk mengisi."}
                 </div>
               )}
             </div>
@@ -694,9 +730,7 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                       <Clock size={13} className="text-slate-400 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-[11px] text-slate-400">{act.created_at}</p>
-                        <p className="text-slate-600">
-                          {formatActivityDescription(act.description, act.type)}
-                        </p>
+                        <p className="text-slate-600">{formatActivityDescription(act.description, act.type)}</p>
                       </div>
                     </div>
                   ))}
@@ -718,27 +752,71 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Status Baru</label>
                   <div className="grid grid-cols-2 gap-2">
                     {statusOptions.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setStatus(s)}
+                      <button key={s}
+                        onClick={() => handleSetStatus(s)}
                         className={`py-2 px-3 rounded-lg text-[12px] font-bold border transition-all ${
                           status === s
-                            ? "bg-indigo-600 text-white border-indigo-600"
+                            ? s === doneStatus
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "bg-indigo-600 text-white border-indigo-600"
                             : "bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-400"
-                        }`}
-                      >
+                        }`}>
                         {statusLabels[s] || s}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Inline checklist — muncul saat Done dipilih + ada yang kosong */}
+                {doneSelected && !allRequiredFilled && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 space-y-1.5">
+                    <p className="text-[12px] font-bold text-red-700 flex items-center gap-1.5">
+                      <AlertTriangle size={13} />
+                      Data wajib sebelum {doneStatus}:
+                    </p>
+                    <div className="space-y-1">
+                      <p className={`flex items-center gap-1.5 text-[12px] ${summaryFilled ? "text-emerald-600" : "text-red-600"}`}>
+                        {summaryFilled ? <CheckCircle2 size={12} className="flex-shrink-0" /> : <XCircle size={12} className="flex-shrink-0" />}
+                        Ringkasan AI (Summary)
+                      </p>
+                      <p className={`flex items-center gap-1.5 text-[12px] ${rootCauseFilled ? "text-emerald-600" : "text-red-600"}`}>
+                        {rootCauseFilled ? <CheckCircle2 size={12} className="flex-shrink-0" /> : <XCircle size={12} className="flex-shrink-0" />}
+                        Root Cause Analysis
+                      </p>
+                      <p className={`flex items-center gap-1.5 text-[12px] ${timelineFilled ? "text-emerald-600" : "text-red-600"}`}>
+                        {timelineFilled ? <CheckCircle2 size={12} className="flex-shrink-0" /> : <XCircle size={12} className="flex-shrink-0" />}
+                        {isIncident ? "Action Taken / Timeline" : "Timeline Progress"}
+                      </p>
+                    </div>
+                    <p className="text-[11px] text-red-400 pt-0.5">↑ Scroll ke atas, isi card yang berwarna merah.</p>
+                  </div>
+                )}
+
+                {/* Semua sudah terisi saat Done dipilih */}
+                {doneSelected && allRequiredFilled && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
+                    <p className="text-[12px] text-emerald-700 font-semibold">
+                      Semua data lengkap — siap simpan sebagai {doneStatus}.
+                    </p>
+                  </div>
+                )}
+
+                {/* Tombol Simpan Status — disabled jika Done dipilih tapi belum komplit */}
                 <button
                   onClick={handleUpdateStatus}
-                  disabled={isPending}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-[13px] font-bold transition-colors"
-                >
-                  {isPending ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                  Simpan Status
+                  disabled={saveDisabled}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-bold transition-colors ${
+                    saveDisabled
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  }`}>
+                  {isPending
+                    ? <><RefreshCw size={14} className="animate-spin" /> Menyimpan...</>
+                    : saveDisabled
+                      ? <><XCircle size={14} /> Lengkapi data dulu</>
+                      : <><Save size={14} /> Simpan Status</>
+                  }
                 </button>
                 <p className="text-[11px] text-slate-400 text-center">
                   Status akan diperbarui di database, portal user, dan Discord.
@@ -756,19 +834,12 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">
                     Nama Petugas (pisah dengan koma)
                   </label>
-                  <textarea
-                    value={assigneeInput}
-                    onChange={(e) => setAssigneeInput(e.target.value)}
-                    rows={3}
+                  <textarea value={assigneeInput} onChange={(e) => setAssigneeInput(e.target.value)} rows={3}
                     placeholder="Contoh: Budi, Siti, Tim Jaringan"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] resize-none focus:outline-none focus:border-indigo-400"
-                  />
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] resize-none focus:outline-none focus:border-indigo-400" />
                 </div>
-                <button
-                  onClick={handleReassign}
-                  disabled={isPending}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white rounded-lg text-[13px] font-bold transition-colors"
-                >
+                <button onClick={handleReassign} disabled={isPending}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white rounded-lg text-[13px] font-bold transition-colors">
                   {isPending ? <RefreshCw size={14} className="animate-spin" /> : <UserCheck size={14} />}
                   Simpan Assignee
                 </button>
@@ -782,28 +853,18 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
             {isIncident && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-rose-800 text-rose-100 text-[12px] font-bold uppercase tracking-wider flex items-center gap-2">
-                  <FileText size={13} />
-                  Laporan Incident
+                  <FileText size={13} /> Laporan Incident
                 </div>
                 <div className="p-4 space-y-3">
                   {reportUrl ? (
-                    <a
-                      href={`/api/admin/report-view/${ticket.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors w-full justify-center"
-                    >
-                      <ExternalLink size={14} />
-                      Buka Laporan HTML
+                    <a href={`/api/admin/report-view/${ticket.id}`} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[13px] font-semibold transition-colors w-full justify-center">
+                      <ExternalLink size={14} /> Buka Laporan HTML
                     </a>
                   ) : (
-                    <p className="text-[13px] text-slate-400 italic">
-                      Laporan belum tersedia. Generate via Discord Bot.
-                    </p>
+                    <p className="text-[13px] text-slate-400 italic">Laporan belum tersedia. Generate via Discord Bot.</p>
                   )}
-                  <p className="text-[11px] text-slate-400">
-                    ⚠️ Laporan hanya dapat diakses dari jaringan internal.
-                  </p>
+                  <p className="text-[11px] text-slate-400">⚠️ Laporan hanya dapat diakses dari jaringan internal.</p>
                 </div>
               </div>
             )}
@@ -812,12 +873,8 @@ export default function AdminTicketDetailClient({ ticket }: { ticket: TicketDeta
             {ticket.discord?.threadUrl && (
               <div className="bg-white rounded-xl border border-slate-200 p-4">
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Discord Thread</p>
-                <a
-                  href={ticket.discord.threadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[13px] text-indigo-600 hover:underline break-all"
-                >
+                <a href={ticket.discord.threadUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-[13px] text-indigo-600 hover:underline break-all">
                   Buka Thread Discord ↗
                 </a>
               </div>

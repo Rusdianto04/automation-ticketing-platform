@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { BackButton } from "./BackButton";
 import type { Ticket } from "@/types";
-import { CardSection, TimelineSection } from "./SharedComponents";
+import { StatusBadge, TimelineSection } from "./SharedComponents";
 
 interface Props {
   ticket: Ticket;
@@ -16,175 +16,135 @@ interface Props {
 }
 
 export default function TicketDetailIncident({
-  ticket, title, orgName, orgDepartment
+  ticket, title, orgName, orgDepartment, createdAt, updatedAt,
 }: Props) {
   const f = ticket.form_fields;
+  const status = ticket.status_pengusulan;
 
   const summaryTicket = ticket.summary_ticket || "";
-  const rootCause = ticket.root_cause || "";
-  const timelineRaw = ticket.timeline_action_taken || ticket.timeline_tindak_lanjut || null;
+  const rootCause     = ticket.root_cause     || "";
+  const timelineRaw   = ticket.timeline_action_taken || ticket.timeline_tindak_lanjut || null;
   const incidentTitle = (f["Incident Title"] as string) || (f["Incident Information"] as string) || title;
 
+  const reporter = (f["Reporter Information"] as string) ||
+    (f["Name"] as string) ||
+    (f["Nama"] as string) ||
+    "—";
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#e8eaed" }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#f1f5f9" }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header
-        className="text-white sticky top-0 z-30"
-        style={{
-          background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}
+        className="sticky top-0 z-30 text-white"
+        style={{ background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
-        <div className="w-full px-5 sm:px-8 lg:px-10">
-          <div className="flex items-center justify-between h-20 relative">
-
-            {/* ── KIRI: BACK + ID ── */}
-            <div className="flex items-center gap-2 text-[13px]">
-
-              {/* BACK */}
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1.5 text-slate-300 hover:text-white transition"
-              >
-                <ArrowLeft size={15} />
-                Kembali ke Dashboard
-              </Link>
-
-              {/* SEPARATOR */}
-              <ChevronRight size={14} className="text-slate-500" />
-
-              {/* ID */}
-              <span className="font-mono text-indigo-300">
-                #{ticket.id}
-              </span>
-
+        <div style={{ maxWidth: 860, margin: "0 auto", padding: "0 20px" }}>
+          <div className="flex items-center justify-between h-16">
+            <BackButton />
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[12px] text-slate-400">#{ticket.id}</span>
+              <StatusBadge status={status} />
             </div>
-
-            {/* ── KANAN: ORG ── */}
-            <div className="text-right">
-              <p className="text-[12px] font-semibold">{orgName}</p>
-              <p className="text-[11px] text-slate-400">{orgDepartment}</p>
-            </div>
-
           </div>
         </div>
       </header>
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
 
-        <div className="max-w-screen-xl mx-auto space-y-5">
-          {/* ── LEFT ── */}
+      <main className="flex-1 py-6" style={{ maxWidth: 860, margin: "0 auto", width: "100%", padding: "24px 20px" }}>
 
-          <div className="space-y-5">
-
-            {/* ── Data Formulir Incident — Indicated Issue masuk tabel ── */}
-            <CardSection
-              header={
-                <div className="w-full text-center py-2">
-
-                  {/* TITLE */}
-                  <h1 className="text-[20px] font-bold text-white leading-snug">
-                    {incidentTitle}
-                  </h1>
-
-                  {/* SUBTITLE */}
-                  <p className="text-[12px] text-white/70 mt-1">
-                    Incident Report
-                  </p>
-
-                </div>
-              }
-            >              <table className="w-full text-[13px]">
-                <tbody className="divide-y divide-slate-100">
-
-                  {/* ── SUMMARY ── */}
-                  <tr>
-                    <td colSpan={2} className="px-5 py-5">
-                      <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                        Summary
-                      </h3>
-
-                      <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-                        {summaryTicket || "Ringkasan belum tersedia."}
-                      </p>
-                    </td>
-                  </tr>
-
-                  {/* ── ROOT CAUSE ── */}
-                  <tr>
-                    <td colSpan={2} className="px-5 py-5">
-                      <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                        Root Cause Analysis
-                      </h3>
-
-                      <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-                        {rootCause || "Root cause analysis belum tersedia."}
-                      </p>
-                    </td>
-                  </tr>
-
-                  {/* ── TIMELINE ── */}
-                  <tr>
-                    <td colSpan={2} className="px-5 py-5">
-                      <h3 className="text-[13px] text-slate-700">
-                        Timeline
-                      </h3>
-
-                      <TimelineSection items={timelineRaw} />
-                    </td>
-                  </tr>
-
-                </tbody>
-              </table>
-            </CardSection>
-
+        {/* Title block */}
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: "#fff1f2", color: "#be123c", border: "1px solid #fecdd3" }}
+            >
+              Incident Report
+            </span>
           </div>
-
+          <h1 className="text-[22px] font-bold text-slate-800 leading-snug">{incidentTitle}</h1>
+          <p className="text-[12px] text-slate-400 mt-1">{orgName} — {orgDepartment}</p>
         </div>
+
+        {/* Info grid */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Informasi Incident</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0 divide-x divide-y divide-slate-100">
+            <InfoCell label="Priority" value={(f["Priority Incident"] || f["Priority"] || "—") as string} />
+            <InfoCell label="Severity" value={(f["Severity Incident"] || f["Severity"] || "—") as string} />
+            <InfoCell label="Suspect Area" value={(f["Suspect Area"] || "—") as string} />
+            <InfoCell label="Indicated Issue" value={(f["Indicated Issue"] || "—") as string} />
+            <InfoCell label="Status" value={<StatusBadge status={status} />} />
+            <InfoCell label="Dibuat" value={createdAt} />
+            <InfoCell label="Diperbarui" value={updatedAt} />
+          </div>
+        </div>
+
+        {/* Indicated Issue — deskripsi panjang jika ada */}
+        {f["Issue Description"] && (
+          <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+            <div className="px-5 py-3 border-b border-slate-100">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Deskripsi Incident</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">{f["Issue Description"] as string}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Summary</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-[13px] text-slate-600 whitespace-pre-wrap leading-relaxed">
+              {summaryTicket || "Summary Ticket belum tersedia."}
+            </p>
+          </div>
+        </div>
+
+        {/* Root Cause */}
+        <div className="bg-white rounded-xl mb-4" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Root Cause Analysis</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-[13px] text-slate-600 whitespace-pre-wrap leading-relaxed">
+              {rootCause || "Root cause analysis belum tersedia."}
+            </p>
+          </div>
+        </div>
+
+        {/* Timeline */}
+        <div className="bg-white rounded-xl" style={{ border: "1px solid #e2e8f0" }}>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Action Taken</p>
+          </div>
+          <div className="px-5 py-4">
+            <TimelineSection items={timelineRaw} />
+          </div>
+        </div>
+
       </main>
 
-      {/* ── Footer ── */}
-      <footer className="w-full py-8">
-        <div className="flex flex-col items-center justify-center gap-3">
-
-          {/* GARIS GRADIENT + FADE */}
-          <div className="w-40 h-[2px] bg-gradient-to-r from-transparent via-slate-500/60 to-transparent animate-fadeIn"></div>
-
-          {/* TEXT */}
-          <p className="text-[12px] text-slate-500/80 tracking-wider">
-            Copyright © {new Date().getFullYear()} SEAMOLEC, Org.
-          </p>
-
+      <footer className="py-8">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-40 h-px" style={{ background: "linear-gradient(90deg, transparent, #94a3b8, transparent)" }} />
+          <p className="text-[11px] text-slate-400 tracking-wider">Copyright © {new Date().getFullYear()} SEAMOLEC, Org.</p>
         </div>
       </footer>
     </div>
   );
 }
 
-function IncidentFieldRow({ icon, label, value }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  if (!value) return null;
+function InfoCell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <tr className="hover:bg-slate-50">
-      <th className="px-4 py-2.5 text-left w-2/5 bg-slate-50/60">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-          <span className="text-rose-400">{icon}</span>
-          {label}
-        </div>
-      </th>
-      <td className="px-4 py-2.5 text-slate-700 font-medium">{value}</td>
-    </tr>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-2">
-      <dt className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5 shrink-0">{label}</dt>
-      <dd className="text-right">{value}</dd>
+    <div className="px-5 py-3.5 flex flex-col gap-0.5">
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{label}</span>
+      <span className="text-[13px] font-medium text-slate-700">{value || "—"}</span>
     </div>
   );
 }
