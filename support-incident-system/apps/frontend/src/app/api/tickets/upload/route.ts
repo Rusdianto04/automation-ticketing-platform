@@ -1,9 +1,13 @@
 // app/api/tickets/upload/route.ts
 // Handle upload file attachment untuk form tiket
+// File diteruskan ke backend dan disimpan di apps/backend/public/uploads/tickets/
 
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+
+const BACKEND_URL =
+  process.env.BACKEND_SELF_URL ||
+  process.env.BACKEND_URL ||
+  "http://backend:3000";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = [
@@ -37,21 +41,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // Teruskan file ke backend untuk disimpan di backend/public/uploads/tickets/
+    const backendForm = new FormData();
+    backendForm.append("file", file);
 
-    // Simpan ke public/uploads/tickets/
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "tickets");
-    await mkdir(uploadDir, { recursive: true });
+    const backendRes = await fetch(`${BACKEND_URL}/api/ticket/upload`, {
+      method: "POST",
+      body: backendForm,
+    });
 
-    const ext       = file.name.split(".").pop() || "jpg";
-    const fileName  = `ticket_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const filePath  = path.join(uploadDir, fileName);
-    const publicUrl = `/uploads/tickets/${fileName}`;
+    const data = await backendRes.json();
 
-    await writeFile(filePath, buffer);
+    if (!backendRes.ok) {
+      return NextResponse.json(
+        { error: data.error || "Gagal upload file ke backend" },
+        { status: backendRes.status }
+      );
+    }
 
-    return NextResponse.json({ url: publicUrl, name: file.name, size: file.size });
+    return NextResponse.json({ url: data.url, name: file.name, size: file.size });
   } catch (err) {
     console.error("[API/tickets/upload] Error:", err);
     return NextResponse.json({ error: "Gagal upload file" }, { status: 500 });

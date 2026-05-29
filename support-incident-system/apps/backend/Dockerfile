@@ -35,9 +35,13 @@ COPY prisma/        ./prisma/
 COPY n8n-workflows/ ./n8n-workflows/
 COPY infra/docker/docker-entrypoint.sh ./docker-entrypoint.sh
 
+# Buat semua direktori yang diperlukan dan set ownership SEBELUM switch user
 RUN chmod +x /app/docker-entrypoint.sh && \
-    mkdir -p /app/public/reports /app/logs && \
-    chown -R appuser:nodejs /app
+    mkdir -p /app/public/reports \
+             /app/public/uploads/tickets \
+             /app/logs && \
+    chown -R appuser:nodejs /app && \
+    chmod -R 775 /app/public/uploads
 
 USER appuser
 

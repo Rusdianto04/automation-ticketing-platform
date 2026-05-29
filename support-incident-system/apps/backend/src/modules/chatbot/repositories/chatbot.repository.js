@@ -33,7 +33,7 @@ async function searchKnowledge({ keywords, category, limit = 5 }) {
       WHERE
         category = ${category}
         AND (
-          keywords && ${kwClean}::text[]
+          keywords && ${kwClean}::varchar[]
           OR to_tsvector('english', title || ' ' || content) @@ plainto_tsquery('english', ${searchText})
         )
       ORDER BY usage_count DESC, success_rate DESC
@@ -44,7 +44,7 @@ async function searchKnowledge({ keywords, category, limit = 5 }) {
       SELECT id, category, title, content, keywords, usage_count, success_rate
       FROM knowledge_base
       WHERE
-        keywords && ${kwClean}::text[]
+        keywords && ${kwClean}::varchar[]
         OR to_tsvector('english', title || ' ' || content) @@ plainto_tsquery('english', ${searchText})
       ORDER BY usage_count DESC, success_rate DESC
       LIMIT ${safeLimit}
@@ -155,7 +155,7 @@ async function createRunbook({ category, title, content, keywords, createdBy }) 
   const kw = Array.isArray(keywords) ? keywords : [];
   const result = await prisma.$queryRaw`
     INSERT INTO knowledge_base (category, title, content, keywords, created_by)
-    VALUES (${category}, ${title}, ${content}, ${kw}::text[], ${createdBy || "system"})
+    VALUES (${category}, ${title}, ${content}, ${kw}::varchar[], ${createdBy || "system"})
     RETURNING id
   `;
   return serialize(result)[0];

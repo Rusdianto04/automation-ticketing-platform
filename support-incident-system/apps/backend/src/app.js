@@ -33,6 +33,12 @@ app.use(
   )
 );
 
+// Serve uploaded ticket attachments dari backend/public/uploads/tickets
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "..", "public", "uploads"))
+);
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use(healthRouter);
 app.use("/api/admin",    adminRouter);

@@ -11,6 +11,13 @@ echo "============================================================"
 echo "  Support & Incident System — Backend Startup"
 echo "============================================================"
 
+# ── Step 0: Ensure upload directories exist and are writable ─────────────────
+echo "[INFO] Ensuring upload directories exist and are writable..."
+mkdir -p /app/public/uploads/tickets /app/public/reports /app/logs
+# Coba chmod — mungkin gagal di named volume production (tidak masalah, sudah benar)
+chmod -R 775 /app/public/uploads 2>/dev/null || true
+echo "[OK] Upload directories ready!"
+
 PG_HOST="${DB_HOST:-postgres}"
 PG_PORT="${DB_PORT:-5432}"
 PG_USER="${DB_USER:-formbricks_user}"

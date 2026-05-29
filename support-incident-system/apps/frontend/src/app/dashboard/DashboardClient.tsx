@@ -756,7 +756,7 @@ export function SupportFormModal({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </div>
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2 pt-6 mt-4 border-t border-slate-100">
             <button onClick={() => { setSlide(1); setError(""); }}
               className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-lg text-[13px] font-semibold">
               ← Kembali

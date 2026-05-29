@@ -21,6 +21,7 @@ const {
   validateCommentBody,
   validateAutoCreateBody,
 } = require("../validators/ticket.validator");
+const uploadCtrl = require("../controllers/upload.controller");
 
 // ── Static routes (MUST come before /:id) ────────────────────────────────────
 
@@ -44,6 +45,9 @@ router.post("/timeline/append", validateApiKey, ctrl.appendTimeline);
 
 // POST /api/ticket/repair-discord
 router.post("/repair-discord", validateApiKey, ctrl.repairDiscord);
+
+// POST /api/ticket/upload — upload attachment gambar dari frontend portal
+router.post("/upload", uploadCtrl.uploadTicketAttachment);
 
 // ── Dynamic routes — /:id ─────────────────────────────────────────────────────
 

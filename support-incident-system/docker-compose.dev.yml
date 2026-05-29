@@ -3,8 +3,6 @@
 #
 # Usage:
 #   docker compose -f docker-compose.dev.yml up -d
-#
-# Services: postgres, backend, frontend, n8n
 # =============================================================================
 
 services:
@@ -39,27 +37,28 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     env_file:
-      - .env
+      - apps/backend/.env
     environment:
-      NODE_ENV:        development
-      PORT:            3000
-      DATABASE_URL:    postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
-      DB_HOST:         postgres
+      NODE_ENV:         development
+      PORT:             3000
+      DATABASE_URL:     postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
+      DB_HOST:          postgres
       BACKEND_SELF_URL: http://backend:3000
-      FRONTEND_URL:    http://frontend:3001
+      FRONTEND_URL:     http://frontend:3001
     volumes:
       - ./apps/backend/src:/app/src
-      - ./logs/backend:/app/logs
+      - sis_uploads_data_dev:/app/public/uploads
+      - sis_backend_logs_dev:/app/logs
     networks:
       - sis-network
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test:     ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health > /dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout:  10s
-      retries:  5
+      test:         ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health > /dev/null 2>&1 || exit 1"]
+      interval:     15s
+      timeout:      10s
+      retries:      5
       start_period: 30s
 
   frontend:
@@ -72,20 +71,15 @@ services:
     ports:
       - "${FRONTEND_PORT:-3001}:3001"
     env_file:
-      - .env
+      - apps/frontend/.env
     environment:
-      NODE_ENV:          development
-      PORT:              3001
-      DATABASE_URL:      postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
-      BACKEND_URL:       http://backend:3000
-      BACKEND_SELF_URL:  http://backend:3000
-      N8N_API_KEY:       ${N8N_API_KEY:-automation_ticketing01_incident02}
-      ORG_NAME:          ${ORG_NAME:-SEAMOLEC}
-      ORG_DEPARTMENT:    ${ORG_DEPARTMENT:-IT Department}
-      NEXTAUTH_URL:      http://localhost:3001
+      NODE_ENV:         development
+      PORT:             3001
+      DATABASE_URL:     postgresql://${DB_USER:-formbricks_user}:${DB_PASSWORD:-formbricks_pass}@postgres:5432/${DB_NAME:-formbricks_tickets}?schema=public
+      BACKEND_URL:      http://backend:3000
+      BACKEND_SELF_URL: http://backend:3000
     volumes:
-      - ./uploads:/app/public/uploads
-      - ./logs/frontend:/app/logs
+      - sis_frontend_logs_dev:/app/logs
     networks:
       - sis-network
     depends_on:
@@ -107,7 +101,7 @@ services:
       N8N_HOST:                          0.0.0.0
       N8N_PORT:                          5678
       N8N_PROTOCOL:                      http
-      WEBHOOK_URL:                       ${N8N_WEBHOOK_BASE:-http://n8n:5678}
+      WEBHOOK_URL:                       http://localhost:5678
       GENERIC_TIMEZONE:                  Asia/Jakarta
       DB_TYPE:                           postgresdb
       DB_POSTGRESDB_HOST:                postgres
@@ -123,7 +117,7 @@ services:
       N8N_TEMPLATES_ENABLED:             false
     volumes:
       - sis_n8n_data_dev:/home/node/.n8n
-      - ./apps/backend/n8n-workflows:/home/node/.n8n/workflows
+      - ./apps/backend/n8n-workflows:/home/node/.n8n/workflows:ro
     networks:
       - sis-network
     depends_on:
@@ -131,25 +125,22 @@ services:
         condition: service_healthy
 
   ngrok:
-      image: ngrok/ngrok:latest
-      container_name: sis-ngrok-dev
-      restart: unless-stopped
-      command:
-        - "start"
-        - "bot"
-        - "--config"
-        - "/etc/ngrok.yml"
-      volumes:
-        - ./ngrok.yml:/etc/ngrok.yml:ro
-      ports:
-        - "4040:4040"
-      networks:
-        - sis-network
-      depends_on:
-        - backend
-      logging:
-        driver: "json-file"
-        options: { max-size: "5m", max-file: "2" }
+    image: ngrok/ngrok:latest
+    container_name: sis-ngrok-dev
+    restart: unless-stopped
+    command:
+      - "start"
+      - "bot"
+      - "--config"
+      - "/etc/ngrok.yml"
+    volumes:
+      - ./docker/ngrok.yml:/etc/ngrok.yml:ro
+    ports:
+      - "4040:4040"
+    networks:
+      - sis-network
+    depends_on:
+      - backend
 
 volumes:
   sis_postgres_data_dev:
@@ -161,6 +152,12 @@ volumes:
   reports_data_dev:
     external: true
     name: formbricks-discord-bot_reports_data
+  sis_uploads_data_dev:
+    name: sis_uploads_data_dev
+  sis_backend_logs_dev:
+    name: sis_backend_logs_dev
+  sis_frontend_logs_dev:
+    name: sis_frontend_logs_dev
 
 networks:
   sis-network:
